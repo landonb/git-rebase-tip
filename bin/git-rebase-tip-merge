@@ -1,0 +1,616 @@
+#!/usr/bin/env sh
+# vim:tw=0:ts=2:sw=2:et:norl:nospell:ft=bash
+# Author: Landon Bouma (landonb &#x40; retrosoft &#x2E; com)
+# Project: https://github.com/landonb/git-rebase-tip#💁
+# License: MIT
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+source_deps () {
+  # Ensure coreutils installed.
+  insist_cmd "realpath" '- TIP: `apt install coreutils` or `brew install coreutils`' \
+    || return 1
+
+  # Load the logger library: https://github.com/landonb/sh-logger#🎮🐸
+  # - Includes print commands: info, warn, error, debug.
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" \
+    || return 1
+
+  LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_DEBUG}}
+  # So that rebase-todo background exec logger output is colorful.
+  SHCOLORS_OFF=false
+
+  # Load Git function lib: https://github.com/landonb/sh-git-nubs#🌰
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-git-nubs/lib/git-nubs.sh" \
+    || return 1
+
+  source_lib \
+    "${GITREPOSPATH:-${DOPP_KIT:-${HOME}/.kit}/git}/git-rebase-tip" \
+    "lib/git-rebase-tip-common.sh" \
+    || return 1
+}
+
+# ***
+
+insist_cmd () {
+  local cmd_name="$1"
+  local install_hint="$2"
+
+  command -v "${cmd_name}" > /dev/null && return || true
+
+  local logger=echo
+  if command -v error > /dev/null; then
+    logger=error
+  fi
+
+  >&2 ${logger} "ERROR: Missing system command ‘${cmd_name}’."
+  if [ -n "${install_hint}" ]; then
+    >&2 ${logger} "${install_hint}"
+  fi
+
+  return 1
+}
+
+# ***
+
+source_lib () {
+  # For DepoXy users, the project parent directory.
+  local depoxy_basedir="$1"
+  # As fallback, check deps/ which ships with this project.
+  local deps_lib_path="$2"
+
+  local lib_name
+  lib_name="$(basename -- "${deps_lib_path}")"
+
+  if command -v "${lib_name}" > /dev/null && . "${lib_name}" \
+    || . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null \
+    || . "$(dirname -- "$(realpath -- "$0")")/../${deps_lib_path}" \
+  ; then
+    return 0
+  fi
+  
+  >&2 echo "ERROR: Cannot determine source path for dependency: ${lib_name}"
+
+  return 1
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# Merges the latest upstream code, then
+# rebases to bubble up scoped commits.
+#
+# - Note there are two approaches we could use:
+#
+#   - The "simpler" approach (or at least the default `git rebase`
+#     behavior) is to drop merge commits.
+#
+#     - You can try this path if you enable the MERGE_BASE_LINEAR_ENABLE
+#       option, below.
+#
+#       - In this case, the git-rebase-todo will be populated by
+#         cherry-picking the latest commits from the upstream branch.
+#
+#       - Note this approach does not preserve upstream history (no
+#         merge commits), so `git merge-base` cannot be used for
+#         cherry-picking. (Because the common ancestor will remain
+#         fixed after picking.) So this approach requires that we
+#         keep track of the upstream HEAD from the latest "merge",
+#         which is done using a special "merge-base-<SHA>" tag.
+#
+#   - The better approach is to run a proper merge.
+#
+#     - Note that `git merge` doesn't use the 'git-rebase-todo'. So if
+#       it stops on conflicts, there's no way to inject an `exec` for when
+#       the user runs `git merge --continue` and finally completes the merge.
+#
+#     - Consequently, this approaches use the `git rebase` "merge" command.
+#       See the GIT_SEQUENCE_EDITOR code below to see how it works (it's
+#       very simple).
+#
+#     - Note this uses `git rebase --rebase-merges`, a somewhat obscure
+#       option, or at least makes for an esoteric rebase-todo when it
+#       includes merge commits (which is not the case here; the call
+#       belows uses the "HEAD" ref, so the rebase-todo starts out empty).
+
+# You probably won't ever want to enable linear history.
+# - It's here mostly as a teaching or investigatory tool.
+MERGE_BASE_LINEAR_ENABLE=${MERGE_BASE_LINEAR_ENABLE:-false}
+
+MERGE_BASE_TAG_PREFIX="${MERGE_BASE_TAG_PREFIX:-merge-base-}"
+
+# ***
+
+# Function exit codes.
+MERGE_STATE_CODE_ERROR=1
+MERGE_STATE_CODE_GAMBOL=2
+
+# ***
+
+# Re: The function name: It's not really a rebase (uses rebase to merge),
+# but nice to use the 'rebase_tip' prefix for discoverability.
+
+rebase_tip_merge () {
+  local rebase_ref="$1"
+  local local_branch="$2"
+  local push_remote="${3:--}"
+  local add_version_tag=${4:-false}
+  local scope_boundary="${5:--}"
+  # >&2 echo "rebase_tip_merge ($#): $@"
+
+  # For the rebase-todo exec command.
+  local resume_cmd="${TIP_RESUME_CMD}"
+  local TIP_COMMAND_ARGS="$@"
+  [ "${push_remote}" != "-" ] || push_remote=""
+  [ "${scope_boundary}" != "-" ] || scope_boundary=""
+
+  local REBASE_REF_SHA=""
+  local PREVIOUS_REF=""
+  insist_args_valid "${rebase_ref}" "${local_branch}" "${resume_cmd}"
+
+  # ***
+
+  local RESUME_CMD_MERGED="merged"
+  local RESUME_CMD_SCOPED="scoped"
+
+  local CURRENT_RESUME_CMD="${resume_cmd}"
+
+  # The default ("") action.
+  if [ -z "${CURRENT_RESUME_CMD}" ]; then
+    scope_boundary="$(print_scope_boundary)"
+    cache_scope_boundary "${scope_boundary}"
+
+    # Expects PREVIOUS_REF and sets CURRENT_RESUME_CMD.
+    # - Checks out local_branch.
+    rebase_merge_branches "${rebase_ref}" "${local_branch}" "${push_remote}"
+  fi
+
+  # ***
+
+  # The "merged" action completed.
+  if [ "${CURRENT_RESUME_CMD}" = "${RESUME_CMD_MERGED}" ]; then
+    # Sets CURRENT_RESUME_CMD.
+    rebase_sort_by_scope "${scope_boundary}"
+  fi
+
+  # ***
+
+  # The "scoped" action completed.
+  if [ "${CURRENT_RESUME_CMD}" = "${RESUME_CMD_SCOPED}" ]; then
+    if ${add_version_tag:-false}; then
+      local vers
+      vers="$(git_largest_version_tag_excluding_tip "${rebase_ref}")"
+
+      local tip_vers
+      tip_vers="$(manage_tip_version_tag "${vers}")"
+
+      if [ -n "${tip_vers}" ]; then
+        info "Created TIP version tag: ${tip_vers}"
+      fi
+    fi
+
+    if ${MERGE_BASE_LINEAR_ENABLE:-false}; then
+      manage_merge_base_tags "${REBASE_REF_SHA}"
+    fi
+  fi
+
+  # ***
+
+  # ORNOT: We could restore original branch...
+  # ... but user will probably want to review their work.
+
+  info " rebase-merge complete 🥳"
+}
+
+# ***
+
+insist_args_valid () {
+  local rebase_ref="$1"
+  local local_branch="$2"
+  local resume_cmd="$3"
+
+  # ***
+
+  REBASE_REF_SHA="$(insist_git_rev_parse "${rebase_ref}" "rebase_ref")" \
+    || exit_1
+
+  insist_git_rev_parse "${local_branch}" "local_branch" > /dev/null
+
+  # ***
+
+  local merge_state_code=0
+
+  PREVIOUS_REF=""
+  verify_merge_state "${rebase_ref}" "${REBASE_REF_SHA}" "${resume_cmd}" \
+    || merge_state_code=$?
+
+  if [ ${merge_state_code} -eq ${MERGE_STATE_CODE_ERROR} ]; then
+
+    exit_1
+  elif [ ${merge_state_code} -eq ${MERGE_STATE_CODE_GAMBOL} ]; then
+    # Aka, "bounce".
+
+    exit_0
+  fi
+}
+
+# ***
+
+check_git_put_wise_and_sort_by_scope_installed () {
+  if ! insist_cmd \
+    'git-put-wise' \
+    '- See: Project: https://github.com/DepoXy/git-put-wise#🥨' \
+    2> /dev/null \
+  ; then
+
+    return 1
+  fi
+
+  # Should be in same bin/ as git-put-wise.
+  if ! insist_cmd \
+    'git-rebase-sort-by-scope-protected-private' \
+    '- See: Project: https://github.com/DepoXy/git-put-wise#🥨' \
+    2> /dev/null \
+  ; then
+
+    return 1
+  fi
+}
+
+# ***
+
+print_scope_boundary () {
+  if ! check_git_put_wise_and_sort_by_scope_installed; then
+
+    return 0
+  fi
+
+  scope_boundary="$(LOG_LEVEL= git put-wise --scope)"
+
+  printf "%s" "${scope_boundary}"
+}
+
+cache_scope_boundary () {
+  local scope_boundary="$1"
+
+  info "git put-wise --scope: $(git_sha_shorten "${scope_boundary}" "7")"
+
+  # The scope_boundary is the final arg, while we peel off and replace.
+  # - `xargs` echoes without newline by default.
+  TIP_COMMAND_ARGS="$( \
+    ( echo "${TIP_COMMAND_ARGS}" | tr ' ' '\n' | head -n -1; \
+      echo "${scope_boundary}"; \
+    ) | xargs
+  )"
+}
+
+# ***
+
+rebase_merge_branches () {
+  local rebase_ref="$1"
+  local local_branch="$2"
+  local push_remote="$3"
+
+  if ! git checkout -q "${local_branch}"; then
+    >&2 error "ERROR: Please specify an existing 'local_branch', not: ${local_branch}"
+
+    exit_1
+  fi
+
+  if [ -n "${push_remote}" ]; then
+    git branch -q -u "${push_remote}"
+  fi
+
+  local rebase_failed=false
+
+  if ! ${MERGE_BASE_LINEAR_ENABLE:-false}; then
+    # Preferred path. Use rebase "merge" command to maintain history.
+    if ! git_rebase_merge_ref "${rebase_ref}"; then
+      rebase_failed=true
+    fi
+  else
+    # Unpreferred path. Pick remote commits except merge commits.
+    if ! git_rebase_pick_range "${PREVIOUS_REF}" "${rebase_ref}"; then
+      rebase_failed=true
+    fi
+  fi
+
+  if ${rebase_failed}; then
+    # Assume conflicts were the failure.
+    inject_exec_callback "${RESUME_CMD_MERGED}" \
+      || exit_1
+
+    log_please_resolve_conflicts_message
+
+    exit_1
+  fi
+
+  CURRENT_RESUME_CMD="${RESUME_CMD_MERGED}"
+}
+
+# ***
+
+# If branch has scoped (PRIVATE:/PROTECTED:) commits, bubble them up.
+rebase_sort_by_scope () {
+  local old_scope_boundary="$1"
+
+  if [ -z "${old_scope_boundary}" ]; then
+
+    return 0
+  fi
+
+  info "git rebase-sort-by-scope-protected-private ${old_scope_boundary}"
+
+  if ! git rebase-sort-by-scope-protected-private "${old_scope_boundary}"; then
+    # Unless we're waiting for success to run another task,
+    # there's nothing to do after the user fixes conflicts.
+    if ${add_version_tag:-false} || ${MERGE_BASE_LINEAR_ENABLE:-false}; then
+      # Assume conflicts were the failure.
+      inject_exec_callback "${RESUME_CMD_SCOPED}" \
+        || exit_1
+
+      log_please_resolve_conflicts_message
+    fi
+
+    exit_1
+  fi
+
+  CURRENT_RESUME_CMD="${RESUME_CMD_SCOPED}"
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# Check for an existing rebase breadcrumb tag, which includes the HEAD
+# SHA from the upstream remote branch when it was last merged.
+#
+# - E.g., consider the tag
+#
+#     merge-base-a0f538833dc8337c10418d05a74e8237b765480c
+#
+# It doesn't matter where this tag is, just that it exists.
+#
+# If the SHA from the tag matches the latest upstream remote branch SHA,
+# then skip the merge, because it already happened (and running merge
+# again would result in the same conflicts as before, and would change
+# history beyond what's already been published to the forked remote.)
+#
+# Our goal here is to maintain a linear branch we can publish and that
+# others can use without needing to force-pull because we keep rebasing
+# our work.
+
+verify_merge_state () {
+  local rebase_ref="$1"
+  local rebase_ref_sha="$2"
+  local resume_cmd="$3"
+
+  if ! ${MERGE_BASE_LINEAR_ENABLE:-false}; then
+    verify_merge_state_merges "${rebase_ref}" "${rebase_ref_sha}" "${resume_cmd}"
+  else
+    verify_merge_state_linear "${rebase_ref_sha}"
+  fi
+}
+
+verify_merge_state_merges () {
+  local rebase_ref="$1"
+  local rebase_ref_sha="$2"
+  local resume_cmd="$3"
+
+  local whatting_verb="Commencing"
+  if [ -n "${resume_cmd}" ]; then
+    whatting_verb="Resuming"
+  fi
+
+  local resumes_after=""
+  if [ -n "${resume_cmd}" ]; then
+    resumes_after=" (‘${resume_cmd}’)"
+  fi
+
+  PREVIOUS_REF="$(git merge-base "${rebase_ref_sha}" "HEAD")"
+
+  info "${whatting_verb} merge with '${rebase_ref}' from ancestor${resumes_after}:"
+  info "  $ git merge-base ${rebase_ref_sha} HEAD"
+  info "  ${PREVIOUS_REF}"
+  if [ -n "${resume_cmd}" ]; then
+    info "(And sorry about the background console output)"
+  fi
+
+  return 0
+}
+
+verify_merge_state_linear () {
+  local rebase_ref_sha="$1"
+
+  PREVIOUS_REF=""
+
+  local rebase_ref_tags
+  rebase_ref_tags="$(print_merge_base_tags)"
+
+  local rebase_ref_tags_cnt
+  rebase_ref_tags_cnt="$(echo "${rebase_ref_tags}" | wc -l)"
+
+  # Remember that `echo | wc -l` is 1, so check empty string.
+  if [ -z "${rebase_ref_tags}" ]; then
+    PREVIOUS_REF="$(git merge-base "${rebase_ref_sha}" "HEAD")"
+
+    info "Commencing picks — No rebase ref tag"
+    info "- Using merge-base as the reference:"
+    info
+    info "    ${PREVIOUS_REF}"
+
+    return 0
+  elif [ ${rebase_ref_tags_cnt} -gt 1 ]; then
+    >&2 error "ERROR: Found more than one rebase ref tag "
+    >&2 error "- Hint: Please remove the erroneous tag(s)"
+    >&2 error "  You can find all the tags by running:   "
+    >&2 error
+    >&2 error "$(attr_reset)    git tag --merged -l \"${MERGE_BASE_TAG_PREFIX}\"*"
+
+    return ${MERGE_STATE_CODE_ERROR}
+  else
+    PREVIOUS_REF="$( \
+      echo "${rebase_ref_tags}" | sed "s/^${MERGE_BASE_TAG_PREFIX}//"
+    )"
+
+    if [ "${rebase_ref_sha}" = "${PREVIOUS_REF}" ]; then
+      info "✓ Branch ‘${local_branch}’ up to date — Nothing to do"
+      info "- Hint: If you'd like to merge anyway, delete the merge crumb:"
+      info
+      info "    git tag -d ${rebase_ref_tags}"
+
+      return ${MERGE_STATE_CODE_GAMBOL}
+    fi
+
+    info "Commencing picks — Using previous ref tag:"
+    info
+    info "    ${PREVIOUS_REF}"
+  fi
+
+  return 0
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# This function is unused, but preserved as a curiosity.
+#
+# - Rather than merge new upstream work, this cherry-picks, keeping
+#   a linear history.
+#
+#   - Note this renders `merge-base` meaningless, so the code uses
+#     a special tag to track the merge-base specially.
+#
+# - HSTRY/2024-03-29: I added this just before I figured out the
+#   better solution.
+#
+#   - Previously, rebase-sort-by-scope-protected-private would always
+#     flatten history.
+#
+#     This causes `merge-base` to remain fixed (from the original tree,
+#     before the first time you picked).
+#
+#     So then you need to maintain your own `merge-base`, which this
+#     feature implements as a special 'merge-base-<SHA>' tag.
+#
+#     - E.g., each time you update, the code parses the <SHA> from the
+#       tag, and it looks for new upstream commits since that commit.
+#
+#   - But now sort-by-scope calls `git rebase --rebase-merges`, which
+#     bubbles PRIVATE and PROTECTED commits, but it also maintains
+#     branch history, and, consequently, moves the `merge-base`, too.
+#
+#   - So this sequence editor no longer needed, but I like to keep
+#     them around for reference, so I don't have to think too hard
+#     the next time I want one. I can just search my sources for
+#     `GIT_SEQUENCE_EDITOR` and hope to find one.
+
+git_rebase_pick_range () {
+  local previous_ref="$1"
+  local rebase_ref="$2"
+
+  info "git rebase — pick ${previous_ref}..${rebase_ref}"
+
+  GIT_SEQUENCE_EDITOR='f () { \
+    local rebase_todo_path="$1"
+    # echo git log --no-merges --format="%H" '${previous_ref}..${rebase_ref}'
+    git log --no-merges --format="%H" '${previous_ref}..${rebase_ref}' \
+      | tac \
+      | sed "s/^/pick /" \
+      > "${rebase_todo_path}"
+    # echo "exec notify-send Rebased!" >> "${rebase_todo_path}"
+    # echo
+    # >&2 cat "${rebase_todo_path}"
+  }; f "$1"' git rebase -i --rebase-merges "HEAD"
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# This does the same work as  `git merge ${rebase_ref}` but it allows us
+# to inject `exec` into the rebase-todo if the rebase stops on conflicts.
+
+git_rebase_merge_ref () {
+  local rebase_ref="$1"
+
+  info "git rebase — merge ${rebase_ref}"
+
+  GIT_SEQUENCE_EDITOR='f () { \
+    local rebase_todo_path="$1"
+    echo "merge '${rebase_ref}'" > "${rebase_todo_path}"
+    # echo "exec notify-send Rebased!" >> "${rebase_todo_path}"
+    # echo
+    # >&2 cat "${rebase_todo_path}"
+  }; f "$1"' git rebase -i "HEAD"
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+manage_merge_base_tags () {
+  local rebase_ref_sha="$1"
+
+  # Remove previous breadcrumb tag.
+  print_merge_base_tags | xargs -n 1 git tag -d >/dev/null
+
+  local merge_base_crumb="${MERGE_BASE_TAG_PREFIX}${rebase_ref_sha}"
+
+  git tag "${merge_base_crumb}" "HEAD"
+}
+
+# ***
+
+print_merge_base_tags () {
+  git tag -l "${MERGE_BASE_TAG_PREFIX}"* --merged
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+PROG_NAME_FRIENDLY="git-rebase-tip-merge"
+
+_NORMAL_EXIT=false
+
+exit_1 () { _NORMAL_EXIT=true; exit 1; }
+exit_0 () { _NORMAL_EXIT=true; exit 0; }
+
+exit_cleanup () {
+  if ! ${_NORMAL_EXIT}; then
+    # USAGE: Alert on unexpected error path, so you can add happy path.
+    >&2 echo "ALERT: "$(basename -- "$0")" exited abnormally!"
+    >&2 echo "- Hint: Enable \`set -x\` and run again..."
+  fi
+
+  trap - EXIT INT
+
+  ${_NORMAL_EXIT} && exit 0 || exit 1
+}
+
+int_cleanup () {
+  _NORMAL_EXIT=true
+
+  exit_cleanup
+}
+
+# ***
+
+main () {
+  set -e
+
+  trap exit_cleanup EXIT
+  trap int_cleanup INT
+
+  rebase_tip_merge "$@"
+
+  # Unhook traps.
+  trap - EXIT INT
+}
+
+# Ensure coreutils.
+if source_deps; then
+  # Run the command unless being sourced.
+  if [ "$(basename -- "$(realpath -- "$0")")" = "${PROG_NAME_FRIENDLY}" ]; then
+    main "$@"
+  fi
+
+  _NORMAL_EXIT=true
+fi
+
+unset -f main
+unset -f source_deps
+
+${_NORMAL_EXIT}
+

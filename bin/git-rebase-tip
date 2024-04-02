@@ -1,0 +1,653 @@
+#!/usr/bin/env sh
+# vim:tw=0:ts=2:sw=2:et:norl:nospell:ft=bash
+# Author: Landon Bouma (landonb &#x40; retrosoft &#x2E; com)
+# Project: https://github.com/landonb/git-rebase-tip#💁
+# License: MIT
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# Rebases the current branch against the specified "upstream/branch"
+# from a new branch partial named with the given slugline. E.g.,
+#
+#   rebase_tip "add-cool-widget" "origin/main"
+#
+# This is useful if you've forked a project to add a few tweaks
+# and you want to follow mainline without submitting a PR to have
+# your work integrated. (I.e., you can't run a simple "git pull"
+# but would need to rebase instead -- this command helps automate
+# the rebase.)
+#
+# The command fetches the indicated remote first. Then it checks
+# merge-base to see if the rebase is necessary. Next, it creates
+# a conventionally-named "tip" branch using the "tip/" prefix,
+# followed by an optional slug-line, today's date, the version +
+# distance, and finally a truncated seven-digit SHA of the latest
+# remote branch HEAD. E.g.,
+#   tip/add-cool-widget/2023-12-21/6.0.0+3+7/2709b85
+#
+# This command is also useful if the branch to rebase on is not
+# the same as the upstream tracking branch. E.g., normally you
+# might run:
+#   git branch --set-upstream-to={upstream} {branchname}
+#   git pull --rebase --autostash
+# Except if you've forked a project, the tracking branch is likely
+# the remote branch on your user's account; but the rebase branch
+# is likely from the project you forked from. I.e., the remote
+# branch used to rebase onto is not the remote branch to which you
+# push the tip.
+#
+# And why do I call it a TIPped branch? Only to honor the somewhat
+# conventional Git concept of a WIP branch (Work In Progress). A
+# TIP branch is similarly somewhat transient, like a WIP branch.
+# Using the tip/ prefix, the date and part of the commit hash gives
+# other developers a little hint that the branch they're looking at
+# is not a normal feature or development branch.
+#
+# The command accepts an option "liminal" branch ref, which is set
+# to match the final TIP HEAD. This is useful if you want to track
+# each time you update the TIP (via the tip/ branches), but you
+# want to maintain one branch on your user's upstream remote.
+#
+# Relatedly, see git-rebase-tip-merge, which can be used to maintain
+# a long-running TIP branch that other users can clone and pull
+# without worrying about history changing.
+#
+# - The only drawback being that your TIP commits will disappear
+#   into the Git history, and may not be easy to PR should you
+#   eventually decide to try to integrate (parts of) your fork
+#   with the original upstream project.
+#
+#   Some one who might live on the edge might maintain both
+#   a so-called 'liminal' branch (whose history often changes)
+#   and a more conventional 'release' branch (whose history
+#   only moves forward).
+
+# PREEQ: Prerequistes:
+#
+#   - Optionally requires git-bump-version-tag if you want to
+#     use the add_version_tag option to set a commit-distance-
+#     postfixed version tag.
+#
+#       https://github.com/landonb/git-bump-version-tag#🐫
+#
+#     This command is not included under deps/ because it adds
+#     a little setup itself (e.g., requires `dunamai`) so user
+#     might as well install git-bump as a first-class citizen.
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+source_deps () {
+  # Ensure coreutils installed.
+  insist_cmd "realpath" '- TIP: `apt install coreutils` or `brew install coreutils`' \
+    || return 1
+
+  # Load the logger library: https://github.com/landonb/sh-logger#🎮🐸
+  # - Includes print commands: info, warn, error, debug.
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" \
+    || return 1
+
+  LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_DEBUG}}
+  # So that rebase-todo background exec logger output is colorful.
+  SHCOLORS_OFF=false
+
+  # Load Git function lib: https://github.com/landonb/sh-git-nubs#🌰
+  # - Includes git_branch_exists, git_branch_name, git_sha_shorten,
+  #   git_remote_branch_object_name, git_upstream_parse_branch_name, etc.
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-git-nubs/lib/git-nubs.sh" \
+    || return 1
+
+  source_lib \
+    "${GITREPOSPATH:-${DOPP_KIT:-${HOME}/.kit}/git}/git-rebase-tip" \
+    "lib/git-rebase-tip-common.sh" \
+    || return 1
+}
+
+# ***
+
+insist_cmd () {
+  local cmd_name="$1"
+  local install_hint="$2"
+
+  command -v "${cmd_name}" > /dev/null && return || true
+
+  local logger=echo
+  if command -v error > /dev/null; then
+    logger=error
+  fi
+
+  >&2 ${logger} "ERROR: Missing system command ‘${cmd_name}’."
+  if [ -n "${install_hint}" ]; then
+    >&2 ${logger} "${install_hint}"
+  fi
+
+  return 1
+}
+
+# ***
+
+source_lib () {
+  # For DepoXy users, the project parent directory.
+  local depoxy_basedir="$1"
+  # As fallback, check deps/ which ships with this project.
+  local deps_lib_path="$2"
+
+  local lib_name
+  lib_name="$(basename -- "${deps_lib_path}")"
+
+  if command -v "${lib_name}" > /dev/null && . "${lib_name}" \
+    || . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null \
+    || . "$(dirname -- "$(realpath -- "$0")")/../${deps_lib_path}" \
+  ; then
+    return 0
+  fi
+  
+  >&2 echo "ERROR: Cannot determine source path for dependency: ${lib_name}"
+
+  return 1
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# Args:
+#
+# - slug_name is the "slug-line" used in the tip/ branch name.
+#
+#   - It serves no purpose other than reminding the user what the
+#     fork does.
+#
+# - remote_ref is the upstream remote (the original project), e.g.,
+#
+#     upstream/main
+#
+#   from which to incorporate changes.
+#
+# The first two arguments are required. The remaining are optional.
+#
+# - liminal_ref is the optional publishing remote (where the user
+#   pushes their fork) for the so-called "liminal" branch, e.g.,
+#
+#     origin/liminal
+#
+#   - This lets the user work from a branch name that won't change,
+#     unlike the tip/ branches, where one is created every time the
+#     user runs git-rebase-tip.
+#
+#   - There's no reason to prefer one approach versus the other.
+#
+#     - The tip/ branches help the user audit any issues between
+#       rebases.
+#
+#     - The "liminal" branch makes it easy to maintain just one
+#       publishing remote branch.
+#
+#   - Note that liminal_ref and remote_ref are both remote
+#     branches.
+#
+#     - It is assumed that remote_ref is managed by some other
+#       user, not the user calling git-rebase-tip.
+#
+#     - On the other hand, liminal_ref is the current user's
+#       remote branch. They can (force) push to it.
+#
+# - local_name is the optional local branch name for the upstream
+#   remote, e.g., "main".
+#
+#   If specified, a local branch will be created or maintained and
+#   set to remote_ref HEAD. I.e., it's just a local version of the
+#   upstream remote branch, useful if you'd like to poke around
+#   files and not just look at Git history for the remote branch.
+#
+#   - This is often the same branch name specified in remote_ref,
+#     but the user can user whatever name they like, e.g., if they
+#     find the remote_ref name offensive (and don't wish to see
+#     it in their `git branch` list).
+#
+# - skip_rebase, if enabled, will skip the `git rebase` call.
+#
+#   This is useful if the caller will finish setting up the TIP
+#   specially, i.e., they only need git-rebase-tip to create the
+#   TIP branch.
+#
+# - add_version_tag, if enabled, will add a new version tag to
+#   the TIP, based on the latest upstream remote version, but
+#   adding commit distances to uniquely identify itself.
+#
+#   E.g., if the latest upstream remote version tag is "1.1.0",
+#   and there are 4 more commits since then on the upstream
+#   remote, and there are also 7 more commits locally (the TIP
+#   work), then the TIP version is "1.1.0+4+7". Note that tag
+#   is not SemVer-compliant. Also it'll be interpreted as a
+#   pre-release tag, meaning it compares "less than" the upstream
+#   branch version tag, e.g., "1.1.0+4+7" < "1.1.0". This may
+#   or may not impact other Git tools that you use.
+
+rebase_tip () {
+  local slug_name="$1"
+  local remote_ref="$2"
+  # Optional args, each with a non-empty default for TIP_COMMAND_ARGS.
+  local liminal_ref="${3:--}"
+  local local_name="${4:--}"
+  local add_version_tag=${5:-false}
+  local skip_rebase=${6:-false}
+
+  # For the rebase-todo exec command.
+  local resume_cmd="${TIP_RESUME_CMD}"
+  local TIP_COMMAND_ARGS="$@"
+  [ "${liminal_ref}" != "-" ] || liminal_ref=""
+  [ "${local_name}" != "-" ] || local_name=""
+
+  # USAGE: Caller-scope variable (return value)
+  # - Empty means already TIPped.
+  TIP_BRANCH=""
+
+  # *** Guard clauses
+
+  local remote_name
+  remote_name="$(git_upstream_parse_remote_name "${remote_ref}" 2> /dev/null)"
+
+  local liminal_branch
+  liminal_branch="$(git_upstream_parse_branch_name "${liminal_ref}" 2> /dev/null)"
+
+  insist_args_valid "${slug_name}" \
+    "${remote_ref}" "${remote_name}" \
+    "${liminal_ref}" "${liminal_branch}" \
+    "${resume_cmd}" \
+    || exit_1
+
+  local ref_branch
+  ref_branch="$(identify_ref_branch "${slug_name}" "${remote_ref}" \
+    "${liminal_branch}" "${skip_rebase}")" \
+    || exit_1
+
+  ${add_version_tag:-false} \
+    && insist_git_bump_installed \
+    || exit_1
+
+  # ****
+
+  local RESUME_CMD_REBASED="rebased"
+
+  # The default ("") action.
+  if [ -z "${resume_cmd}" ]; then
+    fetch_remote "${remote_ref}"
+
+    ff_local_mirror_branch "${remote_ref}" "${remote_name}" "${local_name}"
+  fi
+  
+  # ***
+
+  create_and_rebase_tip_branch_and_push_version_tag \
+    "${slug_name}" \
+    "${remote_ref}" \
+    "${ref_branch}" \
+    "${liminal_branch}" \
+    "${skip_rebase}" \
+    "${add_version_tag}" \
+    "${resume_cmd}"
+
+  if [ -z "${TIP_BRANCH}" ]; then
+    # Already TIPped.
+    return 0
+  fi
+
+  # ***
+
+  manage_liminal_branch "${liminal_branch}" "${liminal_ref}"
+
+  # ***
+
+  info "Created new TIP “${TIP_BRANCH}”"
+  info " rebase-tip complete 🥳"
+}
+
+# ***
+
+insist_args_valid () {
+  local slug_name="$1"
+  local remote_ref="$2"
+  local remote_name="$3"
+  local liminal_ref="$4"
+  local liminal_branch="$5"
+  local resume_cmd="$6"
+
+  git_insist_pristine || return 1
+
+  if [ -z "${slug_name}" ]; then
+    >&2 error "ERROR: Missing 'slug_name': Please specify the slug-name"
+
+    return 1
+  fi
+
+  if [ -z "${remote_ref}" ]; then
+    >&2 error "ERROR: Missing 'remote_ref': Please specify the “remote/branch”"
+
+    return 1
+  fi
+
+  insist_git_rev_parse "${remote_ref}" "remote_ref" > /dev/null
+
+  if [ -z "${remote_name}" ]; then
+    >&2 error "ERROR: 'remote_ref' is not a 'remote/branch': “${remote_ref}”"
+
+    return 1
+  fi
+
+  if [ -n "${liminal_ref}" ]; then
+    if [ -z "${liminal_branch}" ]; then
+      >&2 error "ERROR: 'liminal_ref' is not a 'remote/branch': “${liminal_ref}”"
+
+      return 1
+    fi
+
+    insist_git_rev_parse "${liminal_ref}" "liminal_ref" > /dev/null
+  fi
+  
+  # ***
+
+  print_rebase_status "${remote_ref}" "${resume_cmd}"
+}
+
+# ***
+
+print_rebase_status () {
+  local rebase_ref="$1"
+  local resume_cmd="$2"
+
+  local whatting_verb="Commencing"
+  if [ -n "${resume_cmd}" ]; then
+    whatting_verb="Resuming"
+  fi
+
+  local resumes_after=""
+  if [ -n "${resume_cmd}" ]; then
+    resumes_after=" (‘${resume_cmd}’)"
+  fi
+
+  info "${whatting_verb} rebase atop '${rebase_ref}'${resumes_after}"
+  if [ -n "${resume_cmd}" ]; then
+    info "(And sorry about the background console output)"
+  fi
+}
+
+# ***
+
+identify_ref_branch () {
+  local slug_name="$1"
+  local remote_ref="$2"
+  local liminal_branch="$3"
+  local skip_rebase="$4"
+
+  local current_branch
+  current_branch="$(git_branch_name)"
+
+  local ref_branch="ref/${slug_name}"
+
+  # Prefer create new tip/ branch from most recent tip, falling back
+  # on ref/ if necessary, in case tip/ has recent conflict resolutions.
+  if ${skip_rebase}; then
+    ref_branch="${remote_ref}"
+  elif echo "${current_branch}" | grep -q '^tip/' \
+    || [ "${current_branch}" = "${liminal_branch}" ] \
+  ; then
+    ref_branch="${current_branch}"
+  elif ! git_branch_exists "${ref_branch}"; then
+    >&2 error "ERROR: Not a TIP branch: “${current_branch}”"
+    >&2 error "- HINT: Checkout a tip/ branch, or make a ref/ branch"
+
+    return 1
+  fi
+
+  printf "%s" "${ref_branch}"
+}
+
+# ***
+
+insist_git_bump_installed () {
+  insist_cmd \
+    'git-bump-version-tag' \
+    '- See: https://github.com/landonb/git-bump-version-tag#🐫'
+}
+
+# ***
+
+fetch_remote () {
+  local remote_ref="$1"
+
+  info "git fetch --prune ${remote_name}"
+
+  git fetch --prune "${remote_name}"
+}
+
+# ***
+
+ff_local_mirror_branch () {
+  local remote_ref="$1"
+  local remote_name="$2"
+  local local_name="$3"
+
+  # User can name a local ref to make a local branch for the remote ref.
+  # But it's not necessary, just a convenience.
+  if [ -n "${local_name}" ]; then
+    if ! git checkout -b "${local_name}" "${remote_ref}" > /dev/null 2>&1; then
+      git checkout -q "${local_name}"
+    fi
+
+    git branch -q -u "${remote_ref}"
+
+    git merge -q --ff-only "${remote_ref}"
+
+    git checkout -q -
+  fi
+}
+
+# ***
+
+create_and_rebase_tip_branch_and_push_version_tag () {
+  local slug_name="$1"
+  local remote_ref="$2"
+  local ref_branch="$3"
+  local liminal_branch="$4"
+  local skip_rebase="$5"
+  local add_version_tag="$6"
+  local resume_cmd="$7"
+
+  # "Return" (caller-local) variable.
+  TIP_BRANCH=""
+
+  # ***
+
+  local name=""
+  name="$(add_trailing_path_sep "${slug_name}")"
+
+  local date=""
+  date="$(git_commit_date "${remote_ref}")"
+  date="$(add_trailing_path_sep "${date}")"
+
+  local remote_name
+  remote_name="$(extract_validated_remote_name "${remote_ref}")"
+
+  local vers=""
+  local path_vers=""
+  if ${add_version_tag:-false}; then
+    local vers
+    vers="$(git_largest_version_tag_excluding_tip "${remote_ref}")"
+
+    if [ -n "${vers}" ]; then
+      path_vers="$(add_trailing_path_sep "${vers}")"
+    fi
+  fi
+
+  local remote_head_sha
+  remote_head_sha="$(git_remote_branch_object_name "${remote_ref}")"
+
+  local remote_sha
+  remote_sha="$(git_sha_shorten "${remote_head_sha}" "7")"
+
+  local tip_branch="tip/${name}${date}${path_vers}${remote_sha}"
+
+  # ***
+
+  if [ -z "${resume_cmd}" ]; then
+    if git show-ref --heads -- ${remote_sha} | grep -q " refs/heads/tip"; then
+      tip_branch="$(git branch --list */${remote_sha} | head -1 | sed 's/^ \+//')"
+   
+      info "Latest project source already TIPped"
+      info "- HINT: Delete the branch to recreate it:"
+      info "    git branch -D ${tip_branch}"
+
+      if [ -n "${liminal_branch}" ]; then
+        git checkout -q "${liminal_branch}"
+      else
+        git checkout -q "${tip_branch}"
+      fi
+
+      return 0
+    else
+      git checkout -q -b "${tip_branch}" "${ref_branch}"
+
+      git branch -q -u "${remote_ref}"
+    fi
+
+    # ***
+
+    local ref_commit
+    ref_commit=$(git rev-parse "${remote_ref}")
+
+    local merge_base
+    merge_base=$(git merge-base "${remote_ref}" "${ref_branch}")
+
+    if ! ${skip_rebase}; then
+      if [ "${ref_commit}" = "${merge_base}" ]; then
+        info "Ref branch up to date"
+      else
+        info "git rebase ${ref_commit}"
+
+        if ! git rebase "${ref_commit}"; then
+          inject_exec_callback "${RESUME_CMD_REBASED}" \
+            || exit_1
+
+          log_please_resolve_conflicts_message
+
+          exit_1
+        fi
+      fi
+    fi
+
+    resume_cmd="${RESUME_CMD_REBASED}"
+  fi
+
+  TIP_BRANCH="${tip_branch}"
+
+  if ${add_version_tag:-false}; then
+    local tip_vers
+    # Use a suffix for the TIP/liminal branch tag so we can use the simpler
+    # tip_vers (without a suffix) for the git-rebase-tip-merge tag. The
+    # merged branch is more likely to be what the user publishes, so
+    # reserve the "nicer" tag for that branch.
+    tip_vers="$( \
+      manage_tip_version_tag \
+        "${vers}" \
+        "-${liminal_branch:-${slug_name:-rebase}}"
+    )"
+
+    if [ -n "${tip_vers}" ]; then
+      info "Created TIP version tag: ${tip_vers}"
+
+      path_vers="$(add_trailing_path_sep "${tip_vers}")"
+
+      TIP_BRANCH="tip/${name}${date}${path_vers}${remote_sha}"
+
+      git branch -q -m "${TIP_BRANCH}"
+    fi
+  fi
+}
+
+# ***
+
+add_trailing_path_sep () {
+  echo "$1" | sed 's#\(.\)/*$#\1/#'
+}
+
+# ***
+
+manage_liminal_branch () {
+  local liminal_branch="$1"
+  local liminal_ref="$2"
+
+  if [ -z "${liminal_branch}" ]; then
+    return 0
+  fi
+  
+  if git checkout -q -b "${liminal_branch}" "HEAD" 2> /dev/null; then
+    git branch -q -u "${liminal_ref}"
+  else
+    git branch -q -f "${liminal_branch}" "HEAD"
+    # git-checkout prints to stderr, e.g.,
+    #   Switched to branch 'foo'
+    # Or:
+    #   Already on 'foo'
+    # Whereas to stdout it might print an ahead message, e.g.,
+    #   Your branch is ahead of 'origin/foo' by 19 commits.
+    #     (use "git push" to publish your local commits)
+    git checkout -q "${liminal_branch}"
+    # Forcing the branch has an odd side-effect: changing upstream tracking.
+    git branch -q -u "${liminal_ref}"
+  fi
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+PROG_NAME_FRIENDLY="git-rebase-tip"
+
+_NORMAL_EXIT=false
+
+exit_1 () { _NORMAL_EXIT=true; exit 1; }
+exit_0 () { _NORMAL_EXIT=true; exit 0; }
+
+exit_cleanup () {
+  if ! ${_NORMAL_EXIT}; then
+    # USAGE: Alert on unexpected error path, so you can add happy path.
+    >&2 echo "ALERT: "$(basename -- "$0")" exited abnormally!"
+    >&2 echo "- Hint: Enable \`set -x\` and run again..."
+  fi
+
+  trap - EXIT INT
+
+  ${_NORMAL_EXIT} && exit 0 || exit 1
+}
+
+int_cleanup () {
+  _NORMAL_EXIT=true
+
+  exit_cleanup
+}
+
+# ***
+
+main () {
+  set -e
+
+  trap exit_cleanup EXIT
+  trap int_cleanup INT
+
+  rebase_tip "$@"
+
+  # Unhook traps.
+  trap - EXIT INT
+}
+
+# Ensure coreutils.
+if source_deps; then
+  # Run the command unless being sourced.
+  if [ "$(basename -- "$(realpath -- "$0")")" = "${PROG_NAME_FRIENDLY}" ]; then
+    main "$@"
+  fi
+
+  _NORMAL_EXIT=true
+fi
+
+unset -f main
+unset -f source_deps
+
+${_NORMAL_EXIT}
+

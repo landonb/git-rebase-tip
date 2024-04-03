@@ -627,8 +627,8 @@ int_cleanup () {
 main () {
   set -e
 
-  trap exit_cleanup EXIT
-  trap int_cleanup INT
+  trap -- exit_cleanup EXIT
+  trap -- int_cleanup INT
 
   rebase_tip "$@"
 

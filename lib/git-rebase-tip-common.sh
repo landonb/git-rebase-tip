@@ -229,7 +229,11 @@ manage_tip_version_tag () {
 
   local tip_vers="${next_vers}${dash_prerelease}${stage}${dot_identifier}${commit_dist}"
 
-  manage_tip_bump_version "${tip_vers}"
+  # Run in ( subprocess ) b/c the `export` calls.
+  if ! ( manage_tip_bump_version "${tip_vers}" ); then
+
+    exit_1
+  fi
 
   printf "%s" "${tip_vers}"
 }

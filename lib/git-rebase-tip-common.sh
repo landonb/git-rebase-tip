@@ -6,6 +6,77 @@
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
+_grtcommon_source_deps () {
+  # Ensure coreutils installed.
+  insist_cmd "realpath" '- TIP: `apt install coreutils` or `brew install coreutils`' \
+    || return 1
+
+  # Load the logger library: https://github.com/landonb/sh-logger#🎮🐸
+  # - Includes print commands: info, warn, error, debug.
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" \
+    || return 1
+
+  LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_DEBUG}}
+  # So that rebase-todo background exec logger output is colorful.
+  SHCOLORS_OFF=false
+
+  # Load Git function lib: https://github.com/landonb/sh-git-nubs#🌰
+  # - Includes git_branch_exists, git_branch_name, git_sha_shorten,
+  #   git_remote_branch_object_name, git_upstream_parse_branch_name, etc.
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-git-nubs/lib/git-nubs.sh" \
+    || return 1
+}
+
+# ***
+
+insist_cmd () {
+  local cmd_name="$1"
+  local install_hint="$2"
+
+  command -v "${cmd_name}" > /dev/null && return || true
+
+  local logger=echo
+  if command -v error > /dev/null; then
+    logger=error
+  fi
+
+  >&2 ${logger} "ERROR: Missing system command ‘${cmd_name}’."
+  if [ -n "${install_hint}" ]; then
+    >&2 ${logger} "${install_hint}"
+  fi
+
+  return 1
+}
+
+# ***
+
+# USYNC: Same source_lib in all the files.
+# - SAVVY: The callers have their own source_lib functions, so this
+#   copy not needed if running one of the bin/ scripts. But this fcn.
+#   is needed if you just want to source this file for development.
+source_lib () {
+  # For DepoXy users, the project parent directory.
+  local depoxy_basedir="$1"
+  # As fallback, check deps/ which ships with this project.
+  local deps_lib_path="$2"
+
+  local lib_name
+  lib_name="$(basename -- "${deps_lib_path}")"
+
+  if command -v "${lib_name}" > /dev/null && . "${lib_name}" \
+    || . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null \
+    || . "$(dirname -- "$(realpath -- "$0")")/../${deps_lib_path}" \
+  ; then
+    return 0
+  fi
+  
+  >&2 echo "ERROR: Cannot determine source path for dependency: ${lib_name}"
+
+  return 1
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
 insist_git_rev_parse () {
   local git_ref="$1"
   local var_name="$2"
@@ -237,4 +308,8 @@ print_commit_distances () {
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+_grtcommon_source_deps
+
+unset -f _grtcommon_source_deps
 

@@ -7,23 +7,7 @@
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
 source_deps () {
-  # Ensure coreutils installed.
-  insist_cmd "realpath" '- TIP: `apt install coreutils` or `brew install coreutils`' \
-    || return 1
-
-  # Load the logger library: https://github.com/landonb/sh-logger#🎮🐸
-  # - Includes print commands: info, warn, error, debug.
-  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" \
-    || return 1
-
-  LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_DEBUG}}
-  # So that rebase-todo background exec logger output is colorful.
-  SHCOLORS_OFF=false
-
-  # Load Git function lib: https://github.com/landonb/sh-git-nubs#🌰
-  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-git-nubs/lib/git-nubs.sh" \
-    || return 1
-
+  # Runs: _grtcommon_source_deps
   source_lib \
     "${GITREPOSPATH:-${DOPP_KIT:-${HOME}/.kit}/git}/git-rebase-tip" \
     "lib/git-rebase-tip-common.sh" \
@@ -32,27 +16,7 @@ source_deps () {
 
 # ***
 
-insist_cmd () {
-  local cmd_name="$1"
-  local install_hint="$2"
-
-  command -v "${cmd_name}" > /dev/null && return || true
-
-  local logger=echo
-  if command -v error > /dev/null; then
-    logger=error
-  fi
-
-  >&2 ${logger} "ERROR: Missing system command ‘${cmd_name}’."
-  if [ -n "${install_hint}" ]; then
-    >&2 ${logger} "${install_hint}"
-  fi
-
-  return 1
-}
-
-# ***
-
+# USYNC: Same source_lib in all the files.
 source_lib () {
   # For DepoXy users, the project parent directory.
   local depoxy_basedir="$1"

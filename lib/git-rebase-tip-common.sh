@@ -248,56 +248,6 @@ manage_tip_version_tag () {
 
 # ***
 
-# WRONG/2024-04-02: Alpha compare happens on front matter first, then the
-# final number, so the front matter shouldn't change, because it's compared
-# lexigraphically. So '1.2.3-9-15+30' changing to '1.2.3-10-15+31' because
-# upstream added a commit would still pick '1.2.3-9-15+30' as the largest.
-#
-#   print_commit_distances () {
-#     local vers="$1"
-#     local remote_ref="$2"
-#
-#     local commit_distances=""
-#     local dist_sep="-"
-#     local final_sep="+"
-#     # See also `git bump -c` which outputs HEAD distance, e.g., "6.1.0 (at HEAD~17)"
-#     local dist_remote_tag_to_scoped_head
-#     # Send remote_ref to avoid stderr complaint if remote branch and local
-#     # branch named differently. And specify vers lest current version used.
-#     dist_remote_tag_to_scoped_head="$( \
-#       git bump-version-tag --distance ${vers} -- ${remote_ref}
-#     )"
-#
-#     commit_distances="${dist_sep}${dist_remote_tag_to_scoped_head}"
-#
-#     local dist_remote_tag_to_remote_ref
-#     dist_remote_tag_to_remote_ref=$(git rev-list --count "refs/tags/${vers}..${remote_ref}")
-#     if [ ${dist_remote_tag_to_remote_ref} -ne 0 ]; then
-#       local dist_remote_ref_to_scoped_head
-#       dist_remote_ref_to_scoped_head=$((${dist_remote_tag_to_scoped_head} - ${dist_remote_tag_to_remote_ref}))
-#       commit_distances="${dist_sep}${dist_remote_tag_to_remote_ref}${dist_sep}${dist_remote_ref_to_scoped_head}"
-#     fi
-#
-#     # So that at least our alpha versions are ordered (even though they're
-#     # less than the upstream version but are applied to commits after it),
-#     # append the total commit count.
-#     # - Note this total is dist_remote_tag_to_scoped_head
-#     #                    + dist_remote_tag_to_remote_ref
-#     #                    + # scoped commits.
-#     local dist_remote_tag_to_HEAD
-#     dist_remote_tag_to_HEAD=$(git rev-list --count "refs/tags/${vers}..HEAD")
-#
-#     # The final strings could be, e.g., "-10-15+30", meaning there are 10
-#     # upstream commits since the last version, 15 new commits added by the
-#     # TIP, and (30 - 10 - 15 =) 5 scoped (PRIVATE/PROTECTED) commits.
-#     # - Therefore whenever a commit is added anywhere, the final number
-#     #   advances.
-#     # WRONG: But as noted above, this strategy isn't not properly sortable.
-#     commit_distances="${commit_distances}${final_sep}${dist_remote_tag_to_HEAD}"
-#
-#     printf "%s" "${commit_distances}"
-#   }
-
 print_commit_distances () {
   local vers="$1"
 

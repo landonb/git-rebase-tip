@@ -195,7 +195,7 @@ log_please_resolve_conflicts_message () {
 
 manage_tip_version_tag () {
   local vers="$1"
-  local suffix="$2"
+  local stage="$2"
 
   if [ -z "${vers}" ]; then
     # Assumes caller used git_largest_version_tag.
@@ -204,18 +204,30 @@ manage_tip_version_tag () {
     return 0
   fi
 
-  local commit_distances=""
-  commit_distances="$(print_distance_to_scoped_head "${vers}")"
+  local next_vers
+  if ! next_vers="$( \
+    git bump-version-tag p --check -- "-" 2> /dev/null
+  )"; then
+    >&2 echo "ERROR: Failed: git-bump -p --check -- -"
 
-  local tip_vers="${vers}-TIP+${commit_distances}${suffix}"
+    # This should errexit.
+    git bump-version-tag p --check -- "-"
 
-  # Remove the upstream version tag temporarily, otherwise git-bump
-  # refuses to apply it. That's ∵ tip_vers is a pre-release version,
-  # ∴ tip_vers < curs_vers, but tip_vers^{commit} > vers^{commit},
-  # which is a violation.
-  local remote_vers_object
-  remote_vers_object="$(git rev-parse refs/tags/${vers})"
-  git tag -d "${vers}" > /dev/null
+    exit_1
+  fi
+  
+  local commit_dist=""
+  commit_dist="$(print_distance_to_scoped_head "${vers}")"
+
+  local dash_prerelease="-"
+  local dot_identifier="."
+  if [ -f "$(git_project_root)/pyproject.toml" ]; then
+    # PEP440
+    dash_prerelease=""
+    dot_identifier=""
+  fi
+
+  local tip_vers="${next_vers}${dash_prerelease}${stage}${dot_identifier}${commit_dist}"
 
   # If user deleted old TIP branch and is running this command again,
   # ensure old TIP tag doesn't interfere.
@@ -230,9 +242,6 @@ manage_tip_version_tag () {
   if ! git bump-version-tag "${tip_vers}" -- "-" > /dev/null 2>&1; then
     bump_failed=true
   fi
-
-  # Restore upstream tag.
-  git tag "${vers}" "${remote_vers_object}"
 
   if ${bump_failed}; then
     >&2 warn "ERROR: Failed: git bump-version-tag \"${tip_vers}\" -- \"-\""

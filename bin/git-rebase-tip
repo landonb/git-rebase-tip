@@ -506,11 +506,7 @@ create_and_rebase_tip_branch_and_push_version_tag () {
     # tip_vers (without a suffix) for the git-rebase-tip-merge tag. The
     # merged branch is more likely to be what the user publishes, so
     # reserve the "nicer" tag for that branch.
-    tip_vers="$( \
-      manage_tip_version_tag \
-        "${vers}" \
-        "-${liminal_branch:-${slug_name:-rebase}}"
-    )"
+    tip_vers="$(manage_tip_version_tag "${vers}" "${_stage:-b}")"
 
     if [ -n "${tip_vers}" ]; then
       info "Created TIP version tag: ${tip_vers}"

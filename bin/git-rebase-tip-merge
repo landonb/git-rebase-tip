@@ -145,7 +145,7 @@ rebase_tip_merge () {
       vers="$(git_largest_version_tag_excluding_tip "${rebase_ref}")"
 
       local tip_vers
-      tip_vers="$(manage_tip_version_tag "${vers}")"
+      tip_vers="$(manage_tip_version_tag "${vers}" "${_stage:-rc}")"
 
       if [ -n "${tip_vers}" ]; then
         info "Created TIP version tag: ${tip_vers}"

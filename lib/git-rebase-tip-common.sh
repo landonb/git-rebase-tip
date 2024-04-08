@@ -229,6 +229,14 @@ manage_tip_version_tag () {
 
   local tip_vers="${next_vers}${dash_prerelease}${stage}${dot_identifier}${commit_dist}"
 
+  manage_tip_bump_version "${tip_vers}"
+
+  printf "%s" "${tip_vers}"
+}
+
+manage_tip_bump_version () {
+  local tip_vers="$1"
+
   # If user deleted old TIP branch and is running this command again,
   # ensure old TIP tag doesn't interfere.
   git tag -d "${tip_vers}" > /dev/null 2>&1 || true
@@ -251,8 +259,6 @@ manage_tip_version_tag () {
 
     exit_1
   fi
-
-  printf "%s" "${tip_vers}"
 }
 
 # ***

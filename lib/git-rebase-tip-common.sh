@@ -205,7 +205,7 @@ manage_tip_version_tag () {
   fi
 
   local commit_distances=""
-  commit_distances="$(print_commit_distances "${vers}")"
+  commit_distances="$(print_distance_to_scoped_head "${vers}")"
 
   local tip_vers="${vers}-TIP+${commit_distances}${suffix}"
 
@@ -248,13 +248,19 @@ manage_tip_version_tag () {
 
 # ***
 
-print_commit_distances () {
+print_distance_to_scoped_head () {
   local vers="$1"
 
-  local dist_remote_tag_to_HEAD
-  dist_remote_tag_to_HEAD=$(git rev-list --count "refs/tags/${vers}..HEAD")
+  local scoped_head
+  scoped_head="$(print_scope_boundary)"
+  [ -n "${scoped_head}" ] || scoped_head="HEAD"
 
-  printf "%s" "${dist_remote_tag_to_HEAD}"
+  local dist_remote_tag_to_scoped_head
+  dist_remote_tag_to_scoped_head=$( \
+    git rev-list --count "refs/tags/${vers}..${scoped_head}"
+  )
+
+  printf "%s" "${dist_remote_tag_to_scoped_head}"
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #

@@ -309,6 +309,60 @@ print_commit_distances () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
+check_git_put_wise_and_sort_by_scope_installed () {
+  if ! insist_cmd \
+    'git-put-wise' \
+    '- See: Project: https://github.com/DepoXy/git-put-wise#🥨' \
+    2> /dev/null \
+  ; then
+
+    return 1
+  fi
+
+  # Should be in same bin/ as git-put-wise.
+  if ! insist_cmd \
+    'git-rebase-sort-by-scope-protected-private' \
+    '- See: Project: https://github.com/DepoXy/git-put-wise#🥨' \
+    2> /dev/null \
+  ; then
+
+    return 1
+  fi
+}
+
+# ***
+
+cache_scope_boundary () {
+  local scope_boundary="$1"
+  local scope_boundary="${1:--}"
+
+  info "git put-wise --scope: $(git_sha_shorten "${scope_boundary}" "7")"
+
+  # The scope_boundary is the final arg, while we peel off and replace.
+  # - `xargs` echoes without newline by default.
+  TIP_COMMAND_ARGS="$( \
+    ( echo "${TIP_COMMAND_ARGS}" | tr ' ' '\n' | head -n -1; \
+      echo "${scope_boundary}"; \
+    ) | xargs
+  )"
+}
+
+# ***
+
+print_scope_boundary () {
+  # Optional deps. Silently returns happily if put-wise absent.
+  if ! check_git_put_wise_and_sort_by_scope_installed; then
+
+    return 0
+  fi
+
+  scope_boundary="$(LOG_LEVEL= git put-wise --scope)"
+
+  printf "%s" "${scope_boundary}"
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
 _grtcommon_source_deps
 
 unset -f _grtcommon_source_deps

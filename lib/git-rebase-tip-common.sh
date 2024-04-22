@@ -318,7 +318,7 @@ cache_scope_boundary () {
   TIP_COMMAND_ARGS="$( \
     ( echo "${TIP_COMMAND_ARGS}" \
         | tr ' ' '\n' \
-        | head -n -1; \
+        | $(command -v "ghead" || command -v "head") -n -1; \
       echo "${scope_boundary}"; \
     ) | xargs
   )"

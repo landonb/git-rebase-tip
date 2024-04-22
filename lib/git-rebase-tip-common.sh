@@ -316,7 +316,9 @@ cache_scope_boundary () {
   # The scope_boundary is the final arg, while we peel off and replace.
   # - `xargs` echoes without newline by default.
   TIP_COMMAND_ARGS="$( \
-    ( echo "${TIP_COMMAND_ARGS}" | tr ' ' '\n' | head -n -1; \
+    ( echo "${TIP_COMMAND_ARGS}" \
+        | tr ' ' '\n' \
+        | head -n -1; \
       echo "${scope_boundary}"; \
     ) | xargs
   )"

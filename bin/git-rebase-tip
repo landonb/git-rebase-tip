@@ -555,7 +555,7 @@ manage_liminal_branch () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-PROG_NAME_FRIENDLY="git-rebase-tip"
+PROG_NAME="git-rebase-tip"
 
 clear_traps () {
   trap - EXIT INT
@@ -610,7 +610,7 @@ main () {
 # Ensure coreutils.
 if source_deps; then
   # Run the command unless being sourced.
-  if [ "$(basename -- "$(realpath -- "$0")")" = "${PROG_NAME_FRIENDLY}" ]; then
+  if [ "$(basename -- "$(realpath -- "$0")")" = "${PROG_NAME}" ]; then
     main "$@"
   fi
 fi

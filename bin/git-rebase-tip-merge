@@ -474,7 +474,7 @@ print_merge_base_tags () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-PROG_NAME_FRIENDLY="git-rebase-tip-merge"
+PROG_NAME="git-rebase-tip-merge"
 
 clear_traps () {
   trap - EXIT INT
@@ -529,7 +529,7 @@ main () {
 # Ensure coreutils.
 if source_deps; then
   # Run the command unless being sourced.
-  if [ "$(basename -- "$(realpath -- "$0")")" = "${PROG_NAME_FRIENDLY}" ]; then
+  if [ "$(basename -- "$(realpath -- "$0")")" = "${PROG_NAME}" ]; then
     main "$@"
   fi
 fi

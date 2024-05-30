@@ -28,7 +28,7 @@ source_lib () {
 
   if command -v "${lib_name}" > /dev/null && . "${lib_name}" \
     || . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null \
-    || . "$(dirname -- "$(realpath -- "$0")")/../${deps_lib_path}" \
+    || . "$(dirname -- "$(realpath -- "$0")")/../deps/${deps_lib_path}" \
   ; then
     return 0
   fi

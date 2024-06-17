@@ -326,7 +326,7 @@ git_distance_between_commits () {
 git_remote_exists () {
   local remote="$1"
 
-  git remote get-url ${remote} &> /dev/null
+  git remote get-url ${remote} > /dev/null 2>&1
 }
 
 git_remote_branch_exists () {
@@ -334,7 +334,7 @@ git_remote_branch_exists () {
 
   # SHOWS: [branchname] <most recent commit message>
   # - Remember upstream_ref formatted refs/remotes/<upstream>
-  git show-branch "${upstream_ref}" &> /dev/null
+  git show-branch "${upstream_ref}" > /dev/null 2>&1
 }
 
 git_remote_branch_object_name () {
@@ -489,17 +489,17 @@ print_parent_path_to_project_root () {
 git_insist_git_repo () {
   # A naive approach is to check for the .git/ directory.
   # Another approach is to check --show-toplevel, e.g.,
-  #   git rev-parse --show-toplevel &> /dev/null
+  #   git rev-parse --show-toplevel > /dev/null 2>&1
   # Except both those approaches are truthy before `git init`.
   # A better naive approach might check if there are any refs:
   #   command ls -A ".git/refs/heads"
   # And the better porcelain command checks for HEAD.
-  git rev-parse --abbrev-ref HEAD &> /dev/null && return 0 || true
+  git rev-parse --abbrev-ref HEAD > /dev/null 2>&1 && return 0 || true
 
   local projpath="${1:-$(pwd)}"
 
   local errmsg
-  if git rev-parse --show-toplevel &> /dev/null; then
+  if git rev-parse --show-toplevel > /dev/null 2>&1; then
     errmsg="Specified Git project has no commits"
   else
     errmsg="Specified directory not a Git project"

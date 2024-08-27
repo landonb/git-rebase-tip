@@ -112,7 +112,18 @@ git_is_same_commit () {
   local lhs="$1"
   local rhs="$2"
 
-  [ "$(git_commit_object_name "${lhs}")" = "$(git_commit_object_name "${rhs}")" ]
+  if [ -z "${lhs}" ] || [ -z "${rhs}" ]; then
+
+    return 1
+  fi
+
+  local lhs_name
+  local rhs_name
+
+  true \
+    && lhs_name="$(git_commit_object_name "${lhs}")" \
+    && rhs_name="$(git_commit_object_name "${rhs}")" \
+    && [ "${lhs_name}" = "${rhs_name}" ]
 }
 
 git_object_name_check_format () {
@@ -123,7 +134,7 @@ git_object_name_check_format () {
 
 # There are a few ways to find the object name (SHA) for a tag, including:
 #
-#   git rev-parse refs/tags/sometag
+#   git rev-parse refs/tags/some/tag
 #   git rev-parse --tags=*some/tag
 #   git show-ref --tags
 #
@@ -133,8 +144,8 @@ git_object_name_check_format () {
 # interface choice.
 # - E.g., searching for some/tag:
 #     git rev-parse --tags=some/tag
+#     git rev-parse --tags=refs/tags/some/tag
 #   won't actually match some/tag.
-#   - But it will match some/tag/name.
 #   To match some/tag, you have to glob it explicitly, e.g.,
 #      git rev-parse --tags=*some/tag
 #      git rev-parse --tags=some/tag*
@@ -234,6 +245,22 @@ git_branches_with_tag () {
   # $@: git-branch [<pattern>...] arg(s)
 
   git branch --list --contains refs/tags/${tag_name} $@
+}
+
+# CALSO: git_most_recent_tag / git_most_recent_version_tag
+git_most_recent_tag () {
+  local gitref="$1"
+
+  local contains=""
+  if [ -n "${gitref}" ]; then
+    # This adds a ~<n> suffix to the tag name, e.g., if the tag
+    # named 'foo' is 5 commits away from gitref, prints "foo~5".
+    contains="--contains ${gitref}"
+  fi
+
+  git describe --tags --abbrev=0 ${contains} \
+    2> /dev/null \
+    | sed 's/\~.*//'
 }
 
 # ***
@@ -425,7 +452,7 @@ git_upstream_parse_names () {
 
   # If one, then both, so say we all.
   # - These tests cover inputs like "foo" and "bar/".
-  if false\
+  if false \
     || [ -z "${remote_name}" ] \
     || [ -z "${branch_name}" ] \
     || [ "${remote_name}" = "${deprefixed}" ] \
@@ -648,6 +675,25 @@ git_is_commit () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
+# Check if already signed.
+# - %G? : "G" for good/valid sig, "B" for bad, "U" for good w/ unknown validity,
+#         "X" for good but expired, "Y" for good made by expired key,
+#         "R" for good made by revoked key, "E" if sig cannot be checked
+#         (e.g. missing key) and "N" for no signature
+git_is_gpg_signed_since_commit () {
+  local gitref="$1"
+  local endref="${2:-HEAD}"
+
+  local rev_list_commits="${endref}"
+  if [ -n "${gitref}" ]; then
+    rev_list_commits="${gitref}..${endref}"
+  fi
+
+  ! git log --format="%G?" ${rev_list_commits} | grep -q -e 'N'
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
 # LATER/2023-05-28: Leaving __THE_HARD_WAY variant: I want to add
 # tests, and I want to verify the 2 approaches produce same results.
 
@@ -778,6 +824,8 @@ GITNUBS_RE_SEMVERSPARTS='^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patc
 GITNUBS_VERSION_TAG_PATTERNS="${GITNUBS_PREFIX}[0-9]* [0-9]*"
 
 GITNUBS_TAG_PATTERNS_TAGREFS="refs/tags/${GITNUBS_PREFIX}[0-9]* refs/tags/[0-9]*"
+
+GITNUBS_DESCRIBE_MATCH_PATTERNS="--match ${GITNUBS_PREFIX}[0-9]* --match [0-9]*"
 
 # Prints all tags that match: v[0-9]* [0-9]*
 _git_tag_list_prefilter () {
@@ -1071,6 +1119,64 @@ git_largest_version_tag_from_remote_normal () {
   fi
 
   command rm "${tag_cache}"
+}
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
+
+# CALSO: git_most_recent_tag / git_most_recent_version_tag
+git_most_recent_version_tag () {
+  local gitref="$1"
+
+  local contains=""
+  if [ -n "${gitref}" ]; then
+    # This adds a ~<n> suffix to the tag name, e.g., if the tag
+    # named 'foo' is 5 commits away from gitref, prints "foo~5".
+    contains="--contains ${gitref}"
+  fi
+
+  git describe --tags --abbrev=0 ${contains} ${GITNUBS_DESCRIBE_MATCH_PATTERNS} \
+    2> /dev/null \
+    | sed 's/\~.*//'
+}
+
+# Prints the smallest version tag found after a reference commit.
+# - Uses `--merged HEAD --no-merged <commit>` to keep the search
+#   to the current branch.
+# - If you wanted to search all branches, use --contains, which finds
+#   tags between ${gitref} and any head (so if you've rebased work after
+#   ${gitref} and abandoned tags in those other lines of work, --contains
+#   will find those tags), e.g.:
+#     git tag -l --contains "${gitref}" "[0-9]*" "v[0-9]*"
+
+git_smallest_version_tag_after () {
+  local gitref="${1:-HEAD}"
+
+  local smallest_patch="$( \
+    git tag -l --merged HEAD --no-merged "${gitref}" \
+      ${GITNUBS_VERSION_TAG_PATTERNS} \
+      | grep -E -e "${GITNUBS_RE_VERSPARTS}" \
+      | sort -V \
+      | head -n1
+  )"
+
+  # This is *ridonkulous*.
+  local smallest_including_alpha="$( \
+    git tag -l --merged HEAD --no-merged "${gitref}" \
+      "${smallest_patch}*" \
+      "${GITNUBS_PREFIX:-v}${smallest_patch}*" \
+      | grep -E -e "${GITNUBS_RE_VERSPARTS}" \
+      | grep -E -v "^${smallest_patch}$" \
+      | perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \2.\3.\5\6\7/" \
+      | sed '/^$/d' \
+      | sort -k1,1 -k2,2n \
+      | head -n1 \
+      | sed -E "s/^[^,]*, [^,]*, //"
+  )"
+
+  local smallest_version="${smallest_including_alpha}"
+  [ -n "${smallest_version}" ] || smallest_version="${smallest_patch}"
+
+  printf "%s" "${smallest_version}"
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #

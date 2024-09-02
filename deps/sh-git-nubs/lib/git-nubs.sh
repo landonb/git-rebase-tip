@@ -253,14 +253,12 @@ git_most_recent_tag () {
 
   local contains=""
   if [ -n "${gitref}" ]; then
-    # This adds a ~<n> suffix to the tag name, e.g., if the tag
-    # named 'foo' is 5 commits away from gitref, prints "foo~5".
     contains="--contains ${gitref}"
   fi
 
   git describe --tags --abbrev=0 ${contains} \
     2> /dev/null \
-    | sed 's/\~.*//'
+    | sed_remove_tag_suffix
 }
 
 # ***
@@ -600,6 +598,13 @@ git_insist_nothing_staged () {
   return 1
 }
 
+# ***
+
+# Capture special tig %(commit) value that's used when Unstaged changes
+# or Staged changes is the selected revision. This lets tooling offload
+# the burden of probing and translating that value from the tig config.
+GITNUBS_SPECIAL_TIG_SHA_UNSTAGED="0000000000000000000000000000000000000000"
+
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
 # A few ideas to check for valid SHA1 object:
@@ -680,16 +685,45 @@ git_is_commit () {
 #         "X" for good but expired, "Y" for good made by expired key,
 #         "R" for good made by revoked key, "E" if sig cannot be checked
 #         (e.g. missing key) and "N" for no signature
+
+# ALTLY: Instead of using just 'HEAD' as rev range to include all commits,
+# we could instead use magic root-of-all-roots, e.g.,
+#
+#   # REFER: `printf '' | git hash-object -t tree --stdin`
+#   local GITNUBS_GIT_EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+#
+#   git log --format="%G?" HEAD | wc -l
+#   git log --format="%G?" ${GITNUBS_GIT_EMPTY_TREE}..HEAD | wc -l
+
+# Interestingly, negative lookahead doesn't work with
+# --grep like it does with --author, e.g.,
+#   git log --perl-regexp --grep="^(?!(PRIVATE)).*\$"
+# doesn't work. But there's an --invert-grep option\
+# (yet no --invert-author option).
+# - Though --perl-regexp still works other than negative lookahead.
+
 git_is_gpg_signed_since_commit () {
   local gitref="$1"
   local endref="${2:-HEAD}"
+  local exclude_pattern="$3"
 
   local rev_list_commits="${endref}"
   if [ -n "${gitref}" ]; then
     rev_list_commits="${gitref}..${endref}"
   fi
 
-  ! git log --format="%G?" ${rev_list_commits} | grep -q -e 'N'
+  local invert_grep=""
+  if [ -n "${exclude_pattern}" ]; then
+    invert_grep="--invert-grep"
+  fi
+
+  ! git log \
+    --format="%G?" \
+    --grep="${exclude_pattern}" \
+      ${invert_grep} \
+      --perl-regexp \
+    ${rev_list_commits} \
+    | grep -q -e 'N'
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
@@ -1129,14 +1163,23 @@ git_most_recent_version_tag () {
 
   local contains=""
   if [ -n "${gitref}" ]; then
-    # This adds a ~<n> suffix to the tag name, e.g., if the tag
-    # named 'foo' is 5 commits away from gitref, prints "foo~5".
     contains="--contains ${gitref}"
   fi
 
   git describe --tags --abbrev=0 ${contains} ${GITNUBS_DESCRIBE_MATCH_PATTERNS} \
     2> /dev/null \
-    | sed 's/\~.*//'
+    | sed_remove_tag_suffix
+}
+
+# The git-describe --contains option will add a suffix to the tag name,
+# e.g., if the tag named 'foo' is 5 commits away from gitref, prints
+# "foo~5" (the fifth parent of foo, which can also be denoted "foo~~~~~").
+# - When the tag is on the current commit, prints ^0.
+#   - From `man git-rev-parse`: "<rev>ˆ0 means the commit itself and is
+#     used when <rev> is the object name of a tag object that refers to
+#     a commit object"
+sed_remove_tag_suffix () {
+  sed 's/\(\~\|\^0\).*//'
 }
 
 # Prints the smallest version tag found after a reference commit.

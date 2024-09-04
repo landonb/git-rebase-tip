@@ -247,20 +247,6 @@ git_branches_with_tag () {
   git branch --list --contains refs/tags/${tag_name} $@
 }
 
-# CALSO: git_most_recent_tag / git_most_recent_version_tag
-git_most_recent_tag () {
-  local gitref="$1"
-
-  local contains=""
-  if [ -n "${gitref}" ]; then
-    contains="--contains ${gitref}"
-  fi
-
-  git describe --tags --abbrev=0 ${contains} \
-    2> /dev/null \
-    | sed_remove_tag_suffix
-}
-
 # ***
 
 git_HEAD_commit_sha () {
@@ -340,10 +326,15 @@ git_number_of_commits () {
 }
 
 git_distance_between_commits () {
-  local gitref_lhs="${1:-HEAD}"
-  local gitref_rhs="${2:-HEAD}"
+  local gitref="$1"
+  local endref="${2:-HEAD}"
 
-  git rev-list --count ${gitref_lhs}..${gitref_rhs}
+  local rev_list_commits="${endref}"
+  if [ -n "${gitref}" ]; then
+    rev_list_commits="${gitref}..${endref}"
+  fi
+
+  git rev-list --count ${rev_list_commits}
 }
 
 # ***
@@ -859,8 +850,6 @@ GITNUBS_VERSION_TAG_PATTERNS="${GITNUBS_PREFIX}[0-9]* [0-9]*"
 
 GITNUBS_TAG_PATTERNS_TAGREFS="refs/tags/${GITNUBS_PREFIX}[0-9]* refs/tags/[0-9]*"
 
-GITNUBS_DESCRIBE_MATCH_PATTERNS="--match ${GITNUBS_PREFIX}[0-9]* --match [0-9]*"
-
 # Prints all tags that match: v[0-9]* [0-9]*
 _git_tag_list_prefilter () {
   git tag -l "$@" ${GITNUBS_VERSION_TAG_PATTERNS}
@@ -1157,30 +1146,125 @@ git_largest_version_tag_from_remote_normal () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-# CALSO: git_most_recent_tag / git_most_recent_version_tag
+# BWARE: git-describe --contains will find tags in other branches,
+#        too, that diverge from gitref or any commit after.
+#
+#   GITNUBS_DESCRIBE_MATCH_PATTERNS="--match ${GITNUBS_PREFIX}[0-9]* --match [0-9]*"
+#
+#   git_most_recent_version_tag_contains () {
+#     local gitref="$1"
+#
+#     local contains=""
+#     if [ -n "${gitref}" ]; then
+#       contains="--contains ${gitref}"
+#     fi
+#
+#     git describe --tags --abbrev=0 ${contains} ${GITNUBS_DESCRIBE_MATCH_PATTERNS} \
+#       2> /dev/null \
+#       | sed_remove_tag_suffix
+#   }
+#
+#   git_most_recent_tag () {
+#     local gitref="$1"
+#
+#     local contains=""
+#     if [ -n "${gitref}" ]; then
+#       contains="--contains ${gitref}"
+#     fi
+#
+#     git describe --tags --abbrev=0 ${contains} \
+#       2> /dev/null \
+#       | sed_remove_tag_suffix
+#   }
+#
+#   # The git-describe --contains option will add a suffix to the tag name,
+#   # e.g., if the tag named 'foo' is 5 commits away from gitref, prints
+#   # "foo~5" (the fifth parent of foo, which can also be denoted "foo~~~~~").
+#   # - When the tag is on the current commit, prints ^0.
+#   #   - From `man git-rev-parse`: "<rev>ˆ0 means the commit itself and is
+#   #     used when <rev> is the object name of a tag object that refers to
+#   #     a commit object"
+#   sed_remove_tag_suffix () {
+#     sed 's/\(\~\|\^0\).*//'
+#   }
+
 git_most_recent_version_tag () {
   local gitref="$1"
 
-  local contains=""
+  git_most_recent_tag "${gitref}" ${_limit_version:-true}
+}
+
+git_most_recent_tag () {
+  local gitref="$1"
+  local limit_version="${2:-false}"
+
+  local recent_tag=""
+
+  local no_merged=""
   if [ -n "${gitref}" ]; then
-    contains="--contains ${gitref}"
+    no_merged="--no-merged ${gitref}"
   fi
 
-  git describe --tags --abbrev=0 ${contains} ${GITNUBS_DESCRIBE_MATCH_PATTERNS} \
-    2> /dev/null \
-    | sed_remove_tag_suffix
+  local tag_patterns=""
+  if ${limit_version}; then
+    tag_patterns="${GITNUBS_VERSION_TAG_PATTERNS}"
+  fi
+
+  # THANX: https://stackoverflow.com/a/71690022
+  #   https://stackoverflow.com/questions/71689439/
+  #     git-how-to-sort-tags-by-the-date-of-the-corresponding-commit
+  local tag_commit_objects
+  tag_commit_objects="$( \
+    git tag --format='%(objectname)^{}' --merged HEAD ${no_merged} \
+    ${tag_patterns} \
+    | git cat-file --batch-check \
+    | awk '$2=="commit" { print $1 }' \
+  )"
+
+  if [ -n "${tag_commit_objects}" ]; then
+    local latest_commit
+    latest_commit="$( \
+      echo "${tag_commit_objects}" \
+      | git log --stdin --no-walk --format=%H -1
+    )"
+
+    local existing_tags
+
+    if ! ${limit_version}; then
+      existing_tags="$(git tag --list --points-at "${latest_commit}")"
+
+      # Doesn't matter which tag, really.
+      recent_tag="$(echo "${recent_tags}" | head -n 1)"
+    else
+      existing_tags="$(git_versions_tagged_for_commit_object "${latest_commit}")"
+
+      local largest_basetag
+      largest_basetag="$( \
+        echo "${existing_tags}" \
+        | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
+      )"
+
+      if echo "${existing_tags}" | grep -q -e "^${largest_basetag}$"; then
+        recent_tag="${largest_basetag}"
+      else
+        # See similar pipeline below, git_smallest_version_tag_after
+        recent_tag="$( \
+          echo "${existing_tags}" \
+            | grep -E -e "^${largest_basetag}" \
+            | perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \2.\3.\5\6\7/" \
+            | sed '/^$/d' \
+            | sort -k1,1r -k2,2rn \
+            | head -n1 \
+            | sed -E "s/^[^,]*, [^,]*, //"
+        )"
+      fi
+    fi
+  fi
+
+  printf "%s" "${recent_tag}"
 }
 
-# The git-describe --contains option will add a suffix to the tag name,
-# e.g., if the tag named 'foo' is 5 commits away from gitref, prints
-# "foo~5" (the fifth parent of foo, which can also be denoted "foo~~~~~").
-# - When the tag is on the current commit, prints ^0.
-#   - From `man git-rev-parse`: "<rev>ˆ0 means the commit itself and is
-#     used when <rev> is the object name of a tag object that refers to
-#     a commit object"
-sed_remove_tag_suffix () {
-  sed 's/\(\~\|\^0\).*//'
-}
+# ***
 
 # Prints the smallest version tag found after a reference commit.
 # - Uses `--merged HEAD --no-merged <commit>` to keep the search
@@ -1203,7 +1287,9 @@ git_smallest_version_tag_after () {
   )"
 
   # This is *ridonkulous*.
-  local smallest_including_alpha="$( \
+  # - See similar pipeline above, git_most_recent_tag
+  local smallest_including_alpha
+  smallest_including_alpha="$( \
     git tag -l --merged HEAD --no-merged "${gitref}" \
       "${smallest_patch}*" \
       "${GITNUBS_PREFIX:-v}${smallest_patch}*" \

@@ -453,7 +453,7 @@ create_and_rebase_tip_branch_and_push_version_tag () {
 
   if [ -z "${resume_cmd}" ]; then
     if git show-ref --heads -- ${remote_sha} | grep -q " refs/heads/tip"; then
-      tip_branch="$(git branch --list */${remote_sha} | head -1 | sed 's/^ \+//')"
+      tip_branch="$(git branch --list */${remote_sha} | head -1 | sed 's/^\*\? \+//')"
 
       info "Latest project source already TIPped"
       info "- HINT: Delete the branch to recreate it:"

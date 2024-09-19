@@ -218,9 +218,10 @@ rebase_tip () {
     || exit_1
 
   local ref_branch
-  ref_branch="$(identify_ref_branch "${slug_name}" "${remote_ref}" \
-    "${liminal_branch}" "${skip_rebase}")" \
-    || exit_1
+  ref_branch="$(  \
+    identify_ref_branch "${slug_name}" "${remote_ref}" \
+      "${liminal_branch}" "${skip_rebase}"
+  )" || exit_1
 
   ${add_version_tag:-false} \
     && insist_git_bump_installed \

@@ -223,9 +223,9 @@ rebase_tip () {
       "${liminal_branch}" "${skip_rebase}"
   )" || exit_1
 
-  ${add_version_tag:-false} \
-    && insist_git_bump_installed \
-    || exit_1
+  ( ! ${add_version_tag:-false} \
+    || insist_git_bump_installed \
+  ) || exit_1
 
   # ****
 

@@ -261,8 +261,10 @@ rebase_tip () {
 
   # ***
 
-  info "Created new TIP “${TIP_BRANCH}”"
-  info " rebase-tip complete 🥳"
+  >&2 info "Created new TIP “${TIP_BRANCH}”"
+  >&2 info " rebase-tip complete 🥳"
+
+  printf "%s" "${TIP_BRANCH}"
 }
 
 # ***
@@ -328,9 +330,9 @@ print_rebase_status () {
     resumes_after=" (‘${resume_cmd}’)"
   fi
 
-  info "${whatting_verb} rebase atop '${rebase_ref}'${resumes_after}"
+  >&2 info "${whatting_verb} rebase atop '${rebase_ref}'${resumes_after}"
   if [ -n "${resume_cmd}" ]; then
-    info "(And sorry about the background console output)"
+    >&2 info "(And sorry about the background console output)"
   fi
 }
 
@@ -378,9 +380,9 @@ insist_git_bump_installed () {
 fetch_remote () {
   local remote_ref="$1"
 
-  info "git fetch --prune ${remote_name}"
+  >&2 info "git fetch --prune ${remote_name}"
 
-  git fetch --prune "${remote_name}"
+  >&2 git fetch --prune "${remote_name}"
 }
 
 # ***
@@ -456,9 +458,9 @@ create_and_rebase_tip_branch_and_push_version_tag () {
     if git show-ref --heads -- ${remote_sha} | grep -q " refs/heads/tip"; then
       tip_branch="$(git branch --list */${remote_sha} | head -1 | sed 's/^\*\? \+//')"
 
-      info "Latest project source already TIPped"
-      info "- HINT: Delete the branch to recreate it:"
-      info "    git branch -D ${tip_branch}"
+      >&2 info "Latest project source already TIPped"
+      >&2 info "- HINT: Delete the branch to recreate it:"
+      >&2 info "    git branch -D ${tip_branch}"
 
       if [ -n "${liminal_branch}" ]; then
         git checkout -q "${liminal_branch}"
@@ -483,9 +485,9 @@ create_and_rebase_tip_branch_and_push_version_tag () {
 
     if ! ${skip_rebase}; then
       if [ "${ref_commit}" = "${merge_base}" ]; then
-        info "Ref branch up to date"
+        >&2 info "Ref branch up to date"
       else
-        info "git rebase ${ref_commit}"
+        >&2 info "git rebase ${ref_commit}"
 
         if ! git rebase "${ref_commit}"; then
           inject_exec_callback "${RESUME_CMD_REBASED}" \
@@ -512,7 +514,7 @@ create_and_rebase_tip_branch_and_push_version_tag () {
     tip_vers="$(manage_tip_version_tag "${vers}" "${_stage:-b}")"
 
     if [ -n "${tip_vers}" ]; then
-      info "Created TIP version tag: ${tip_vers}"
+      >&2 info "Created TIP version tag: ${tip_vers}"
 
       path_vers="$(add_trailing_path_sep "${tip_vers}")"
 

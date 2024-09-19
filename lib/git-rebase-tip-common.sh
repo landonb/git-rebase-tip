@@ -187,8 +187,8 @@ inject_exec_callback () {
 # ***
 
 log_please_resolve_conflicts_message () {
-  info "Please resolve conflicts. We'll resume"
-  info "after the final \`git rebase --continue\`"
+  >&2 info "Please resolve conflicts. We'll resume"
+  >&2 info "after the final \`git rebase --continue\`"
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #

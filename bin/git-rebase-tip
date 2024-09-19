@@ -100,6 +100,7 @@ source_lib () {
     || . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null \
     || . "$(dirname -- "$(realpath -- "$0")")/../deps/${deps_lib_path}" \
   ; then
+
     return 0
   fi
   
@@ -249,6 +250,7 @@ rebase_tip () {
 
   if [ -z "${TIP_BRANCH}" ]; then
     # Already TIPped.
+
     return 0
   fi
 
@@ -452,7 +454,7 @@ create_and_rebase_tip_branch_and_push_version_tag () {
   if [ -z "${resume_cmd}" ]; then
     if git show-ref --heads -- ${remote_sha} | grep -q " refs/heads/tip"; then
       tip_branch="$(git branch --list */${remote_sha} | head -1 | sed 's/^ \+//')"
-   
+
       info "Latest project source already TIPped"
       info "- HINT: Delete the branch to recreate it:"
       info "    git branch -D ${tip_branch}"

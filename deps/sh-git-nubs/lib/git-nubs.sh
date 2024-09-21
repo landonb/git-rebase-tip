@@ -44,6 +44,18 @@ git_branch_name () {
     git rev-parse --abbrev-ref=loose HEAD 2> /dev/null \
   ); then
     # Unnamed branch, e.g., before first commit after `git init .`.
+    # - See also:
+    #     $ git init .
+    #     $ git log -1
+    #     fatal: your current branch 'main' does not have any commits yet
+    #     # Or whatever branch is named in .git/HEAD
+    # - Speaking of which, we could use branch name from .git/HEAD:
+    #     $ cat .git/HEAD
+    #     ref: refs/heads/main
+    #   but this code has always used "<?!>" and I think it's
+    #   a better clue to the user than printing a normal branch
+    #   name (i.e., so user can see there's no branch without
+    #   testing for nonzero return).
     branch_name="<?!>"
 
     exit_code=1
@@ -146,6 +158,12 @@ git_object_name_check_format () {
   local tag_name="$1"
 
   git check-ref-format "refs/tags/${tag_name}"
+}
+
+git_object_type () {
+  local gitref="$1"
+
+  git cat-file -t "$(git rev-parse "${gitref}")"
 }
 
 # There are a few ways to find the object name (SHA) for a tag, including:
@@ -338,7 +356,12 @@ git_number_of_commits () {
   local gitref="${1:-HEAD}"
   [ $# -lt 1 ] || shift
 
-  git rev-list --count "${gitref}" "$@"
+  if ! git_branch_name > /dev/null; then
+    # Fresh repo, e.g., `git init . && git_number_of_commits`.
+    echo "0"
+  else
+    git rev-list --count "${gitref}" "$@"
+  fi
 }
 
 git_distance_between_commits () {

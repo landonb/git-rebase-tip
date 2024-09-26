@@ -793,6 +793,19 @@ git_is_gpg_signed_since_commit () {
     | grep -q -e 'N'
 }
 
+git_has_no_gpg_signage_since_commit () {
+  local gitref="$1"
+  local endref="${2:-HEAD}"
+
+  local rev_list_commits="${endref}"
+  if [ -n "${gitref}" ]; then
+    rev_list_commits="${gitref}..${endref}"
+  fi
+
+  ! git log --format="%G?" ${rev_list_commits} \
+    | grep -q -v 'N'
+}
+
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
 # UCASE: For git-format-patch and git-am to share the same commit SHAs,

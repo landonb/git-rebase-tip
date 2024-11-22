@@ -254,7 +254,11 @@ rebase_sort_by_scope () {
 
   info "git rebase-sort-by-scope-protected-private ${old_scope_boundary}"
 
-  if ! git rebase-sort-by-scope-protected-private "${old_scope_boundary}"; then
+  if ! \
+    PW_OPTION_ORPHAN_TAGS=true \
+    PW_OPTION_IGNORE_AUTHOR=true \
+    git rebase-sort-by-scope-protected-private "${old_scope_boundary}" \
+  ; then
     # Unless we're waiting for success to run another task,
     # there's nothing to do after the user fixes conflicts.
     if ${add_version_tag:-false} || ${MERGE_BASE_LINEAR_ENABLE:-false}; then

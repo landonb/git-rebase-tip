@@ -165,12 +165,6 @@ source_lib () {
 #     find the remote_ref name offensive (and don't wish to see
 #     it in their `git branch` list).
 #
-# - skip_rebase, if enabled, will skip the `git rebase` call.
-#
-#   This is useful if the caller will finish setting up the TIP
-#   specially, i.e., they only need git-rebase-tip to create the
-#   TIP branch.
-#
 # - add_version_tag, if enabled, will add a new version tag to
 #   the TIP, based on the latest upstream remote version, but
 #   adding commit distances to uniquely identify itself.
@@ -183,6 +177,12 @@ source_lib () {
 #   pre-release tag, meaning it compares "less than" the upstream
 #   branch version tag, e.g., "1.1.0+4+7" < "1.1.0". This may
 #   or may not impact other Git tools that you use.
+#
+# - skip_rebase, if enabled, will skip the `git rebase` call.
+#
+#   This is useful if the caller will finish setting up the TIP
+#   specially, i.e., they only need git-rebase-tip to create the
+#   TIP branch.
 
 rebase_tip () {
   local slug_name="$1"

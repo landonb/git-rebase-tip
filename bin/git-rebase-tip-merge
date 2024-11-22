@@ -120,6 +120,9 @@ rebase_tip_merge () {
 
   # The default ("") action.
   if [ -z "${CURRENT_RESUME_CMD}" ]; then
+    # Ensure sorted and signed before merging.
+    must_resort_and_sign_commits
+
     scope_boundary="$(print_scope_boundary)"
     cache_scope_boundary "${scope_boundary}"
 
@@ -194,6 +197,22 @@ insist_args_valid () {
     # Aka, "bounce".
 
     exit_0
+  fi
+}
+
+# ***
+
+must_resort_and_sign_commits () {
+  info "Sorting and signing latest commits..."
+
+  if ! git rebase-sort-by-scope-protected-private \
+    "${_starting_ref:-}" \
+    "${_enable_gpg_sign_if_signingkey:-true}" \
+    "${_use_magic_starting_ref:-true}" \
+  ; then
+    >&2 echo "ERROR: Sort & sign failed!"
+
+    exit_1
   fi
 }
 

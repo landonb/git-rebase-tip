@@ -50,7 +50,7 @@ insist_cmd () {
 
 # ***
 
-# USYNC: Same source_lib in all the files.
+# USYNC: Same source_lib in both files: git-rebase-tip-(merge|common)
 # - SAVVY: The callers have their own source_lib functions, so this
 #   copy not needed if running one of the bin/ scripts. But this fcn.
 #   is needed if you just want to source this file for development.
@@ -63,9 +63,30 @@ source_lib () {
   local lib_name
   lib_name="$(basename -- "${deps_lib_path}")"
 
-  if . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null \
-    || . "$(dirname -- "$(realpath -- "$0")")/../deps/${deps_lib_path}" \
-  ; then
+  local lib_dir
+  lib_dir="$(dirname -- "${deps_lib_path}")"
+
+  local sourced=false
+
+  local before_cd="$(pwd -L)"
+
+  cd -- "${depoxy_basedir}/${lib_dir}"
+
+  if . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null; then
+    sourced=true
+  else
+    # Assumes started in this script's parent directory.
+    cd -- "${before_cd}/../deps/${lib_dir}"
+
+    if . "${before_cd}/../deps/${deps_lib_path}"; then
+      sourced=true
+    fi
+  fi
+
+  cd -- "${before_cd}"
+
+  if ${sourced}; then
+
     return 0
   fi
   

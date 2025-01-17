@@ -338,10 +338,17 @@ cache_scope_boundary () {
   TIP_COMMAND_ARGS="$( \
     ( echo "${TIP_COMMAND_ARGS}" \
         | tr ' ' '\n' \
-        | $(command -v "ghead" || command -v "head") -n -1; \
+        | $(gnu_head) -n -1; \
       echo "${scope_boundary}"; \
     ) | xargs
   )"
+}
+
+gnu_head () {
+  for cmd in "ghead" "head"; do
+    ( unset -f ${cmd}; unalias ${cmd}; command -v ${cmd} ) 2> /dev/null \
+      && break
+  done
 }
 
 # ***

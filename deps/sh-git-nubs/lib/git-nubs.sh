@@ -5,17 +5,17 @@
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-git_branch_exists () {
+git_branch_exists() {
   local branch_name="$1"
 
   # Hrmm, you'd think this would not print:
   #   git rev-parse --verify --quiet HEAD
   # This works, but technically we should use rev-parse:
   #  git show-ref --verify --quiet refs/heads/${branch_name}
-  git rev-parse --verify --end-of-options "refs/heads/${branch_name}" > /dev/null 2>&1
+  git rev-parse --verify --end-of-options "refs/heads/${branch_name}" >/dev/null 2>&1
 }
 
-git_branch_name () {
+git_branch_name() {
   local project_root
   project_root="$(git_project_root)"
   [ $? -eq 0 ] || return 1
@@ -40,8 +40,8 @@ git_branch_name () {
 
   local branch_name
 
-  if ! branch_name=$(\
-    git rev-parse --abbrev-ref=loose HEAD 2> /dev/null \
+  if ! branch_name=$(
+    git rev-parse --abbrev-ref=loose HEAD 2>/dev/null
   ); then
     # Unnamed branch, e.g., before first commit after `git init .`.
     # - See also:
@@ -66,18 +66,18 @@ git_branch_name () {
   return ${exit_code}
 }
 
-git_branch_name_full () {
+git_branch_name_full() {
   git rev-parse --symbolic-full-name HEAD
 }
 
-git_branch_name_check_format () {
+git_branch_name_check_format() {
   local branch_name="$1"
 
   # Use --branch, which is stricter than the more basic:
   #   git check-ref-format "refs/heads/${branch_name}"
   # - It's not documented, but echoes valid branch name
   #   (unlike without --branch, then nothing output).
-  git check-ref-format --branch "${branch_name}" > /dev/null 2>&1
+  git check-ref-format --branch "${branch_name}" >/dev/null 2>&1
 }
 
 # ***
@@ -91,19 +91,19 @@ git_branch_name_check_format () {
 
 # Prints the tracking aka upstream branch.
 # - BWARE: This will silently errexit, if you're not prepared.
-git_tracking_branch () {
-  git_tracking_branch_with_error 2> /dev/null
+git_tracking_branch() {
+  git_tracking_branch_with_error 2>/dev/null
 }
 
-git_tracking_branch_with_error () {
+git_tracking_branch_with_error() {
   git rev-parse --abbrev-ref --symbolic-full-name @{u}
 }
 
-git_upstream () {
+git_upstream() {
   git_tracking_branch
 }
 
-git_tracking_branch_safe () {
+git_tracking_branch_safe() {
   # Because errexit, fallback on empty string.
   git_tracking_branch || echo ''
 }
@@ -113,7 +113,7 @@ git_tracking_branch_safe () {
 # BWARE: If the arg. is a valid SHA format, git-rev-parse echoes
 #        it without checking if object actually exists.
 #        - See git_is_commit for checking if commit object.
-git_commit_object_name () {
+git_commit_object_name() {
   git_typed_object_name "commit" "$@"
 }
 
@@ -121,11 +121,11 @@ git_commit_object_name () {
 #   $ git tag some-tag 4b825dc642cb  # Ever-present magic empty tree
 #   $ git_tree_object_name some-tag
 #   4b825dc642cb6eb9a060e54bf8d69288fbee4904
-git_tree_object_name () {
+git_tree_object_name() {
   git_typed_object_name "tree" "$@"
 }
 
-git_typed_object_name () {
+git_typed_object_name() {
   local type="$1"
   local gitref="${2:-HEAD}"
   local opts="$3"
@@ -133,10 +133,10 @@ git_typed_object_name () {
   # CPYST:
   #   gitref=HEAD && git rev-parse --verify "${gitref}^{commit}"
   #   gitref=refs/tags/1.2.3 && git rev-parse --verify "${gitref}^{commit}"
-  git rev-parse ${opts} --verify --end-of-options "${gitref}^{${type}}" 2> /dev/null
+  git rev-parse ${opts} --verify --end-of-options "${gitref}^{${type}}" 2>/dev/null
 }
 
-git_is_same_commit () {
+git_is_same_commit() {
   local lhs="$1"
   local rhs="$2"
 
@@ -148,31 +148,31 @@ git_is_same_commit () {
   local lhs_name
   local rhs_name
 
-  true \
-    && lhs_name="$(git_commit_object_name "${lhs}")" \
-    && rhs_name="$(git_commit_object_name "${rhs}")" \
-    && [ "${lhs_name}" = "${rhs_name}" ]
+  true &&
+    lhs_name="$(git_commit_object_name "${lhs}")" &&
+    rhs_name="$(git_commit_object_name "${rhs}")" &&
+    [ "${lhs_name}" = "${rhs_name}" ]
 }
 
-git_object_name_check_format () {
+git_object_name_check_format() {
   local tag_name="$1"
 
   git check-ref-format "refs/tags/${tag_name}"
 }
 
-git_object_type () {
+git_object_type() {
   local gitref="$1"
 
   git cat-file -t "$(git rev-parse "${gitref}")"
 }
 
-git_is_valid_object () {
+git_is_valid_object() {
   local gitref="$1"
 
-  git rev-parse "${gitref}" > /dev/null 2>&1
+  git rev-parse "${gitref}" >/dev/null 2>&1
 }
 
-git_is_same_object () {
+git_is_same_object() {
   local lhs="$1"
   local rhs="$2"
 
@@ -184,10 +184,10 @@ git_is_same_object () {
   local lhs_name
   local rhs_name
 
-  true \
-    && lhs_name="$(git rev-parse "${lhs}" 2> /dev/null)" \
-    && rhs_name="$(git rev-parse "${rhs}" 2> /dev/null)" \
-    && [ "${lhs_name}" = "${rhs_name}" ]
+  true &&
+    lhs_name="$(git rev-parse "${lhs}" 2>/dev/null)" &&
+    rhs_name="$(git rev-parse "${rhs}" 2>/dev/null)" &&
+    [ "${lhs_name}" = "${rhs_name}" ]
 }
 
 # ***
@@ -195,7 +195,7 @@ git_is_same_object () {
 # REFER: `printf '' | git hash-object -t tree --stdin`
 GIT_EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
-git_is_empty_tree () {
+git_is_empty_tree() {
   local gitref="$1"
 
   git_is_same_object "${gitref}" "${GIT_EMPTY_TREE}"
@@ -235,7 +235,7 @@ git_is_empty_tree () {
 # Here we mimic --tags behavior.
 
 # BWARE: Returns the tag object ID, not the commit to which it's attached.
-git_tag_object_name () {
+git_tag_object_name() {
   local gitref="$1"
   local opts="$2"
 
@@ -246,7 +246,7 @@ git_tag_object_name () {
 
   # rev-parse normally echoes gitref even if it fails (and also prints to
   # stderr), unless --verify.
-  git rev-parse ${opts} --verify --end-of-options "refs/tags/${gitref}" 2> /dev/null
+  git rev-parse ${opts} --verify --end-of-options "refs/tags/${gitref}" 2>/dev/null
 }
 
 # There are a few ways to find the commit ID for a tag, including:
@@ -260,7 +260,7 @@ git_tag_object_name () {
 #   - BWARE: Not all functions that list/find tags find both annotated
 #     and lightweight tags.
 
-git_tag_commit_object () {
+git_tag_commit_object() {
   local gitref="$1"
 
   local failed_rev_list=false
@@ -270,20 +270,20 @@ git_tag_commit_object () {
   #   git_tag_object_name "${gitref}^{commit}"
 
   local id_from_rev_list=""
-  id_from_rev_list="$(git rev-list -n 1 "refs/tags/${gitref}" 2> /dev/null)" \
-    || failed_rev_list=true
+  id_from_rev_list="$(git rev-list -n 1 "refs/tags/${gitref}" 2>/dev/null)" ||
+    failed_rev_list=true
 
   # TRACK/2024-03-31: A curiosity:
   if ${GITNUBS_DEV:-false}; then
     local failed_rev_parse=false
 
     local id_from_rev_parse=""
-    id_from_rev_parse="$(git_tag_object_name "${gitref}^{commit}")" \
-      || failed_rev_parse=true
+    id_from_rev_parse="$(git_tag_object_name "${gitref}^{commit}")" ||
+      failed_rev_parse=true
 
-    if [ "${failed_rev_list}" != "${failed_rev_parse}" ] \
-      || [ "${id_from_rev_list}" != "${id_from_rev_parse}" ] \
-    ; then
+    if [ "${failed_rev_list}" != "${failed_rev_parse}" ] ||
+      [ "${id_from_rev_list}" != "${id_from_rev_parse}" ] \
+      ; then
       >&2 echo
       >&2 echo "GAFFE: Unexpected: \`git rev-list -n 1 ${gitref}\`     " \
         "→ “${id_from_rev_list}” [failed: ${failed_rev_list}]"
@@ -298,19 +298,19 @@ git_tag_commit_object () {
   ! ${failed_rev_list}
 }
 
-git_tag_exists () {
+git_tag_exists() {
   local tag_name="$1"
 
-  git rev-parse --verify --end-of-options "refs/tags/${tag_name}" > /dev/null 2>&1
+  git rev-parse --verify --end-of-options "refs/tags/${tag_name}" >/dev/null 2>&1
 }
 
-git_tag_name_check_format () {
+git_tag_name_check_format() {
   local tag_name="$1"
 
   git check-ref-format "refs/tags/${tag_name}"
 }
 
-git_branches_with_tag () {
+git_branches_with_tag() {
   local tag_name="$1"
   shift
   # $@: git-branch [<pattern>...] arg(s)
@@ -320,7 +320,7 @@ git_branches_with_tag () {
 
 # ***
 
-git_HEAD_commit_sha () {
+git_HEAD_commit_sha() {
   git rev-parse HEAD
 }
 
@@ -329,11 +329,11 @@ git_HEAD_commit_sha () {
 # derived from a parentless commit, in which case rev-list would output
 # more than one commit object. (Oddly, my landonb/homefries.git project
 # has such a case early in its history.)
-git_first_commit_sha () {  # aka git_root_commit_sha, perhaps
+git_first_commit_sha() { # aka git_root_commit_sha, perhaps
   git rev-list --max-parents=0 --first-parent HEAD
 }
 
-git_sha_shorten () {
+git_sha_shorten() {
   local string="$1"
   local maxlen="${2:-${GITNUBS_LENGTH_SHORT_SHA:-12}}"
 
@@ -346,19 +346,19 @@ git_sha_shorten () {
 
 # ***
 
-git_first_commit_message () {
+git_first_commit_message() {
   git --no-pager log --format=%s --max-parents=0 --first-parent HEAD
 }
 
-git_latest_commit_message () {
+git_latest_commit_message() {
   git --no-pager log --format=%s -1 "${1:-HEAD}"
 }
 
 # ***
 
-git_child_of () {
-  git --no-pager log --reverse --ancestry-path --format='%H' ${1}..HEAD \
-    | head -1
+git_child_of() {
+  git --no-pager log --reverse --ancestry-path --format='%H' ${1}..HEAD |
+    head -1
 }
 
 # Some obvious and non-obvious ways to get the parent to a commit:
@@ -381,7 +381,7 @@ git_child_of () {
 #     confusing to me, like, "What's 'ambiguous'? Oh, it's the object ref.
 #     that's not a real object." Which is why I like cat-file's error the
 #     best: "fatal: Not a valid object name 'foo'".
-git_parent_of () {
+git_parent_of() {
   git cat-file -p $1 | grep -e "^parent " | awk '{ print $2 }'
 }
 
@@ -389,11 +389,11 @@ git_parent_of () {
 
 # See also git-extra's git-count, which counts to HEAD, and with --all
 # print counts per author.
-git_number_of_commits () {
+git_number_of_commits() {
   local gitref="${1:-HEAD}"
   [ $# -lt 1 ] || shift
 
-  if ! git_branch_name > /dev/null; then
+  if ! git_branch_name >/dev/null; then
     # Fresh repo, e.g., `git init . && git_number_of_commits`.
     echo "0"
   else
@@ -401,7 +401,7 @@ git_number_of_commits () {
   fi
 }
 
-git_distance_between_commits () {
+git_distance_between_commits() {
   local gitref="$1"
   local endref="${2:-HEAD}"
 
@@ -415,31 +415,31 @@ git_distance_between_commits () {
 
 # ***
 
-git_remote_exists () {
+git_remote_exists() {
   local remote="$1"
 
-  git remote get-url ${remote} > /dev/null 2>&1
+  git remote get-url ${remote} >/dev/null 2>&1
 }
 
-git_remote_branch_exists () {
+git_remote_branch_exists() {
   local upstream_ref="$(_git_print_remote_branch_unambiguous "${1}" "${2}")"
 
   # SHOWS: [branchname] <most recent commit message>
   # - Remember upstream_ref formatted refs/remotes/<upstream>
-  git show-branch "${upstream_ref}" > /dev/null 2>&1
+  git show-branch "${upstream_ref}" >/dev/null 2>&1
 }
 
-git_remote_branch_object_name () {
+git_remote_branch_object_name() {
   local upstream_ref="$(_git_print_remote_branch_unambiguous "${1}" "${2}")"
 
   # Prints SHA on success, or repeats input and returns nonzero on failure,
   # unless --verify then doesn't repeat input to stdout.
   # - Remember upstream_ref formatted refs/remotes/<upstream>
-  git rev-parse --verify --end-of-options "${upstream_ref}" 2> /dev/null
+  git rev-parse --verify --end-of-options "${upstream_ref}" 2>/dev/null
 }
 
 # Prints refs/remotes/<remote>/<branch>.
-_git_print_remote_branch_unambiguous () {
+_git_print_remote_branch_unambiguous() {
   local remote="$1"
   local branch="$2"
 
@@ -455,7 +455,7 @@ _git_print_remote_branch_unambiguous () {
   printf "%s" "refs/remotes/$(echo "${remote_branch}" | sed 's#^refs/remotes/##')"
 }
 
-git_remote_default_branch () {
+git_remote_default_branch() {
   local remote="$1"
 
   [ -n "${remote}" ] || return 1
@@ -475,7 +475,7 @@ git_remote_default_branch () {
 # solutions, and a quick search didn't enlighten me, so I baked my own.
 
 # Think of this as `dirname` of remote branch ref. (aka `rootname`).
-git_upstream_parse_remote_name () {
+git_upstream_parse_remote_name() {
   local remote_branch="$1"
 
   [ $# -eq 1 ] || remote_branch="$(git_tracking_branch_with_error)"
@@ -487,7 +487,7 @@ git_upstream_parse_remote_name () {
 }
 
 # Think of this as `basename` of remote branch ref. (aka `rootless`).
-git_upstream_parse_branch_name () {
+git_upstream_parse_branch_name() {
   local remote_branch="$1"
 
   [ $# -eq 1 ] || remote_branch="$(git_tracking_branch_with_error)"
@@ -498,7 +498,7 @@ git_upstream_parse_branch_name () {
   git_upstream_parse_names false true "${remote_branch}"
 }
 
-git_upstream_parse_names () {
+git_upstream_parse_names() {
   local print_remote="${1:-false}"
   local print_branch="${2:-false}"
   local upstream_ref="$3"
@@ -517,12 +517,11 @@ git_upstream_parse_names () {
 
   # If one, then both, so say we all.
   # - These tests cover inputs like "foo" and "bar/".
-  if false \
-    || [ -z "${remote_name}" ] \
-    || [ -z "${branch_name}" ] \
-    || [ "${remote_name}" = "${deprefixed}" ] \
-    || [ "${branch_name}" = "${deprefixed}" ]; \
-  then
+  if false ||
+    [ -z "${remote_name}" ] ||
+    [ -z "${branch_name}" ] ||
+    [ "${remote_name}" = "${deprefixed}" ] ||
+    [ "${branch_name}" = "${deprefixed}" ]; then
     return 0
   fi
 
@@ -533,12 +532,12 @@ git_upstream_parse_names () {
 }
 
 # The other opposite of `dirname`, `rootname`.
-_git_parse_path_rootname () {
+_git_parse_path_rootname() {
   echo "$1" | sed 's#/.*$##'
 }
 
 # The other opposite of `basename`, something progenitor? `progname`?
-_git_parse_path_rootless () {
+_git_parse_path_rootless() {
   echo "$1" | sed 's#^[^/]*/##'
 }
 
@@ -546,16 +545,16 @@ _git_parse_path_rootless () {
 
 # Note that Git resolves symlinks, e.g., what cd'ing to project root
 # and running `realpath .`, `readlink -f .`, or `pwd -P` would show.
-git_project_root () {
+git_project_root() {
   git_project_root_absolute
 }
 
-git_project_root_absolute () {
+git_project_root_absolute() {
   # Same output as git-extras's `git root`.
   git rev-parse --show-toplevel
 }
 
-git_project_root_relative () {
+git_project_root_relative() {
   (
     cd "./$(git rev-parse --show-cdup)"
 
@@ -566,19 +565,19 @@ git_project_root_relative () {
 # Print empty string if at project root;
 # print '../'-concatenated path to project root;
 # or git prints to stderr if not a Git project.
-print_parent_path_to_project_root () {
+print_parent_path_to_project_root() {
   local depth_path="$(git root -r)"
   # SPIKE/2022-12-11: Confirm this is what I see:
   # - ✓ `git root -r` returns empty string @linux.
   # - ? On @macOS, does it return '.'?
-  ( [ "${depth_path}" = "." ] || [ "${depth_path}" = "" ] ) \
-    && return 0 || true
+  ([ "${depth_path}" = "." ] || [ "${depth_path}" = "" ]) &&
+    return 0 || true
 
   printf "%s" "${depth_path}" | sed 's#\([^/]\+\)#..#g'
 }
 
 # Check that the current directory exists in a Git repo.
-git_insist_git_repo () {
+git_insist_git_repo() {
   # A naive approach is to check for the .git/ directory.
   # Another approach is to check --show-toplevel, e.g.,
   #   git rev-parse --show-toplevel > /dev/null 2>&1
@@ -586,12 +585,12 @@ git_insist_git_repo () {
   # A better naive approach might check if there are any refs:
   #   command ls -A ".git/refs/heads"
   # And the better porcelain command checks for HEAD.
-  git rev-parse --abbrev-ref HEAD > /dev/null 2>&1 && return 0 || true
+  git rev-parse --abbrev-ref HEAD >/dev/null 2>&1 && return 0 || true
 
   local projpath="${1:-$(pwd)}"
 
   local errmsg
-  if git rev-parse --show-toplevel > /dev/null 2>&1; then
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
     errmsg="Specified Git project has no commits"
   else
     errmsg="Specified directory not a Git project"
@@ -602,11 +601,11 @@ git_insist_git_repo () {
   return 1
 }
 
-git_is_git_repo_root () {
+git_is_git_repo_root() {
   local proj_path="${1:-$(pwd)}"
 
   local repo_root
-  if ! repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"; then
+  if ! repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
 
     return 1
   fi
@@ -619,7 +618,7 @@ git_is_git_repo_root () {
   return 0
 }
 
-git_insist_pristine () {
+git_insist_pristine() {
   test -n "$(git status --porcelain=v1)" || return 0
 
   local projpath="${1:-$(pwd)}"
@@ -636,11 +635,11 @@ git_insist_pristine () {
 
 # I use the term 'tidy' a lot (as opposed to 'clean' (and 'dirty')),
 # so might as well make the alias function.
-git_insist_tidy () {
+git_insist_tidy() {
   git_insist_pristine "$@"
 }
 
-git_nothing_staged () {
+git_nothing_staged() {
   local filepath="$1"
 
   if [ $# -eq 0 ]; then
@@ -650,7 +649,7 @@ git_nothing_staged () {
   fi
 }
 
-git_insist_nothing_staged () {
+git_insist_nothing_staged() {
   ! git_nothing_staged || return 0
 
   local projpath="${1:-$(pwd)}"
@@ -739,10 +738,10 @@ GITNUBS_SPECIAL_TIG_SHA_UNSTAGED="0000000000000000000000000000000000000000"
 #   git_commit_object_name if you just want to verify something is a commit but
 #   don't need the SHA.
 
-git_is_commit () {
+git_is_commit() {
   local gitref="$1"
 
-  git cat-file -e "${gitref}^{commit}" 2> /dev/null
+  git cat-file -e "${gitref}^{commit}" 2>/dev/null
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
@@ -769,7 +768,7 @@ git_is_commit () {
 # (yet no --invert-author option).
 # - Though --perl-regexp still works other than negative lookahead.
 
-git_is_gpg_signed_since_commit () {
+git_is_gpg_signed_since_commit() {
   local gitref="$1"
   local endref="${2:-HEAD}"
   local exclude_pattern="$3"
@@ -787,13 +786,13 @@ git_is_gpg_signed_since_commit () {
   ! git log \
     --format="%G?" \
     --grep="${exclude_pattern}" \
-      ${invert_grep} \
-      --perl-regexp \
-    ${rev_list_commits} \
-    | grep -q -e 'N'
+    ${invert_grep} \
+    --perl-regexp \
+    ${rev_list_commits} |
+    grep -q -e 'N'
 }
 
-git_has_no_gpg_signage_since_commit () {
+git_has_no_gpg_signage_since_commit() {
   local gitref="$1"
   local endref="${2:-HEAD}"
 
@@ -802,8 +801,8 @@ git_has_no_gpg_signage_since_commit () {
     rev_list_commits="${gitref}..${endref}"
   fi
 
-  ! git log --format="%G?" ${rev_list_commits} \
-    | grep -q -v 'N'
+  ! git log --format="%G?" ${rev_list_commits} |
+    grep -q -v 'N'
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
@@ -821,7 +820,7 @@ git_has_no_gpg_signage_since_commit () {
 
 # MAYBE: Prefer `git log -1` vs. `git log --no-walk`, for readability.
 
-git_rebase_set_committer_same_as_author () {
+git_rebase_set_committer_same_as_author() {
   local gitref="$1"
 
   if [ -z "${gitref}" ]; then
@@ -837,20 +836,21 @@ git_rebase_set_committer_same_as_author () {
   fi
 
   git rebase ${interactive} \
-    --exec "$( \
+    --exec "$(
       echo '
         env
           GIT_COMMITTER_DATE="$(git log --no-walk --format=%ad)"
           GIT_COMMITTER_NAME="$(git log --no-walk --format=%an)"
           GIT_COMMITTER_EMAIL="$(git log --no-walk --format=%ae)"
             git commit --amend --allow-empty --no-edit --no-verify;
-      ' | sed 's/^ \+/ /' | tr -d $'\n')" \
+      ' | sed 's/^ \+/ /' | tr -d $'\n'
+    )" \
     ${gitref}
 }
 
 # ***
 
-git_oldest_commit_with_committer_different_than_author () {
+git_oldest_commit_with_committer_different_than_author() {
   local gitref="$1"
   local endref="${2:-HEAD}"
 
@@ -860,12 +860,12 @@ git_oldest_commit_with_committer_different_than_author () {
   fi
   gitrange="${gitrange}${endref}"
 
-  git log --format="%H %ad %an <%ae>%n%H %cd %cn <%ce>" "${gitrange}" \
-    | tac \
-    | uniq \
-    | awk '{ print $1 }' \
-    | uniq -d \
-    | head -n 1
+  git log --format="%H %ad %an <%ae>%n%H %cd %cn <%ce>" "${gitrange}" |
+    tac |
+    uniq |
+    awk '{ print $1 }' |
+    uniq -d |
+    head -n 1
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
@@ -875,7 +875,7 @@ git_oldest_commit_with_committer_different_than_author () {
 
 # Show versions tagged on specified object, or HEAD.
 # - Strips leading 'v' prefix from tag names.
-git_versions_tagged_for_commit_object__THE_HARD_WAY () {
+git_versions_tagged_for_commit_object__THE_HARD_WAY() {
   local hash="$1"
 
   if [ -z "${hash}" ]; then
@@ -899,21 +899,21 @@ git_versions_tagged_for_commit_object__THE_HARD_WAY () {
   # So search on the known commit hash, which returns refs/tags/<tag>^{},
   # then isolate just the tag -- and match only tags with a leading digit
   # (assuming that indicates a version tag, to exclude non-version tags).
-  git show-ref --tags -d \
-    | grep -E -e "^${hash}.* refs/tags/${GITNUBS_RE_VERSPARTS__INCLUSIVE}" \
-    | sed \
+  git show-ref --tags -d |
+    grep -E -e "^${hash}.* refs/tags/${GITNUBS_RE_VERSPARTS__INCLUSIVE}" |
+    sed \
       -e 's#.* refs/tags/v\?##' \
       -e 's/\^{}//'
 }
 
 # Show versions tagged on specified object, or HEAD.
 # - Strips leading 'v' prefix from tag names.
-git_versions_tagged_for_commit_object () {
+git_versions_tagged_for_commit_object() {
   local object="$1"
 
-  git tag --list --points-at ${object} \
-    | grep -E -e "${GITNUBS_RE_VERSPARTS}" \
-    | sed -e 's/^v//'
+  git tag --list --points-at ${object} |
+    grep -E -e "${GITNUBS_RE_VERSPARTS}" |
+    sed -e 's/^v//'
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
@@ -980,7 +980,7 @@ GITNUBS_RE_VERSPARTS_NORMAL="^${GITNUBS_RE_VERSPARTS_NORMAL__INCLUSIVE}$"
 #     $ echo "v1.2.3" | perl -ne "print if /${GITNUBS_RE_SEMVERSPARTS}/"
 #     # OUTPUT: None. Not a valid SemVer.
 #
-# NOTED: This regex not used herein, but provided for end users. 
+# NOTED: This regex not used herein, but provided for end users.
 
 GITNUBS_RE_SEMVERSPARTS='^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
 
@@ -1002,7 +1002,7 @@ GITNUBS_VERSION_TAG_PATTERNS="${GITNUBS_PREFIX}[0-9]* [0-9]*"
 GITNUBS_TAG_PATTERNS_TAGREFS="refs/tags/${GITNUBS_PREFIX}[0-9]* refs/tags/[0-9]*"
 
 # Prints all tags that match: v[0-9]* [0-9]*
-_git_tag_list_prefilter () {
+_git_tag_list_prefilter() {
   git tag -l "$@" ${GITNUBS_VERSION_TAG_PATTERNS}
 }
 
@@ -1010,18 +1010,18 @@ _git_tag_list_prefilter () {
 # - NOTED: Uses --refs, otherwise needs `| sed '/\^{}$/d'` to remove refs/tags/abcd123^{} refs
 # CPYST:
 #   git ls-remote --tags --refs starter refs/tags/[0-9]* refs/tags/v[0-9]* | cut -f 2 | sed 's#^refs/tags/##'
-_git_tag_list_prefilter_from_remote () {
+_git_tag_list_prefilter_from_remote() {
   local remote_name="$1"
 
-  git ls-remote --tags --refs "${remote_name}" ${GITNUBS_TAG_PATTERNS_TAGREFS} \
-    | cut -f 2 \
-    | sed 's#^refs/tags/##'
+  git ls-remote --tags --refs "${remote_name}" ${GITNUBS_TAG_PATTERNS_TAGREFS} |
+    cut -f 2 |
+    sed 's#^refs/tags/##'
 }
 
 # Prints largest *basetag* of any tag in the list on stdin.
 # - E.g., if largest tag is either "v2.0.1" or "2.0.1-alpha.1",
 #   prints "2.0.1".
-_pick_largest_basetag () {
+_pick_largest_basetag() {
   local re_versparts="$1"
 
   grep -E -e "${re_versparts}" |
@@ -1031,43 +1031,43 @@ _pick_largest_basetag () {
     head -n1
 }
 
-git_latest_version_basetag () {
-  _git_tag_list_prefilter "$@" \
-    | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
+git_latest_version_basetag() {
+  _git_tag_list_prefilter "$@" |
+    _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
 }
 
-git_latest_version_normal () {
-  _git_tag_list_prefilter "$@" \
-    | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS_NORMAL}"
+git_latest_version_normal() {
+  _git_tag_list_prefilter "$@" |
+    _pick_largest_basetag "${GITNUBS_RE_VERSPARTS_NORMAL}"
 }
 
-git_latest_version_basetag_safe () {
+git_latest_version_basetag_safe() {
   git_latest_version_basetag || printf "%s" "0.0.0"
 }
 
 # ***
 
-git_latest_version_from_remote_basetag () {
+git_latest_version_from_remote_basetag() {
   local remote_name="$1"
 
-  _git_tag_list_prefilter_from_remote "${remote_name}" \
-    | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
+  _git_tag_list_prefilter_from_remote "${remote_name}" |
+    _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
 }
 
-git_latest_version_from_remote_normal () {
+git_latest_version_from_remote_normal() {
   local remote_name="$1"
 
-  _git_tag_list_prefilter_from_remote "${remote_name}" \
-    | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS_NORMAL}"
+  _git_tag_list_prefilter_from_remote "${remote_name}" |
+    _pick_largest_basetag "${GITNUBS_RE_VERSPARTS_NORMAL}"
 }
 
 # Because `git ls-remote` pings the network, cache the results.
-_generate_tag_list_from_remote () {
+_generate_tag_list_from_remote() {
   local remote_name="$1"
 
   local tag_cache="$(mktemp $(basename -- "$0").XXXXXX)"
 
-  if ! _git_tag_list_prefilter_from_remote "${remote_name}" > "${tag_cache}"; then
+  if ! _git_tag_list_prefilter_from_remote "${remote_name}" >"${tag_cache}"; then
     >&2 echo "ERROR: \`git ls-remote \"${remote_name}\"\` failed"
 
     return 1
@@ -1126,7 +1126,7 @@ _generate_tag_list_from_remote () {
 # - That is to say, this function returns the largest pre-release
 #   tag for a given basevers (or the basevers itself if there are
 #   no pre-release tags; or nothing if there's no basevers tag).
-_latest_version_fulltag () {
+_latest_version_fulltag() {
   local basevers="$1"
   shift
   # Any additional args are passed to git-tag.
@@ -1136,7 +1136,7 @@ _latest_version_fulltag () {
     _pick_largest_fulltag
 }
 
-_pick_largest_fulltag () {
+_pick_largest_fulltag() {
   grep -E -e "${GITNUBS_RE_VERSPARTS}" |
     perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \1\2.\3.\5\6\7/" |
     sort -k1,1 -k2,2n |
@@ -1168,7 +1168,7 @@ _pick_largest_fulltag () {
 # This function prints the largest version tag from any commit,
 # and it includes (does not strip) the v-prefix, like some of
 # these git-nubs calls do.
-git_largest_version_tag () {
+git_largest_version_tag() {
   # Any args are passed to git-tag.
 
   local basevers="$(git_latest_version_basetag "$@")"
@@ -1185,9 +1185,9 @@ git_largest_version_tag () {
   # - A basevers version is higher than any pre-release with the same basevers.
   # - The grep filters out refs/tags/has/a/path/to/<basevers>
   if git show-ref --tags -- \
-    "${basevers}" "${GITNUBS_PREFIX}${basevers}" \
-    | grep -q ' refs/tags/[^/]\+$' \
-  ; then
+    "${basevers}" "${GITNUBS_PREFIX}${basevers}" |
+    grep -q ' refs/tags/[^/]\+$' \
+    ; then
     # Print the tag name with the v-prefix, if present.
     git --no-pager tag -l -- \
       "${basevers}" "${GITNUBS_PREFIX}${basevers}"
@@ -1198,7 +1198,7 @@ git_largest_version_tag () {
   fi
 }
 
-git_largest_version_tag_normal () {
+git_largest_version_tag_normal() {
   # Any args are passed to git-tag.
 
   local normal_vers="$(git_latest_version_normal "$@")"
@@ -1215,7 +1215,7 @@ git_largest_version_tag_normal () {
 
 # ***
 
-git_largest_version_tag_from_remote () {
+git_largest_version_tag_from_remote() {
   local remote_name="$1"
 
   if [ -z "${remote_name}" ]; then
@@ -1229,11 +1229,11 @@ git_largest_version_tag_from_remote () {
   # Alternatively, without a cache:
   #   basevers="$(git_latest_version_from_remote_basetag "${remote_name}")"
   local tag_cache
-  tag_cache="$(_generate_tag_list_from_remote "${remote_name}")" \
-    || return 1
+  tag_cache="$(_generate_tag_list_from_remote "${remote_name}")" ||
+    return 1
 
   local basevers
-  basevers="$( \
+  basevers="$(
     cat "${tag_cache}" | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
   )"
 
@@ -1241,25 +1241,25 @@ git_largest_version_tag_from_remote () {
 
   if [ -n "${basevers}" ]; then
     # Try to print an exact basetag match.
-    if ! cat "${tag_cache}" \
-        | grep \
-          -e "^${basevers}$" \
-          -e "^${GITNUBS_PREFIX}${basevers}$" \
-        | head -n1 \
-    ; then
+    if ! cat "${tag_cache}" |
+      grep \
+        -e "^${basevers}$" \
+        -e "^${GITNUBS_PREFIX}${basevers}$" |
+      head -n1 \
+      ; then
       # Must be a pre-release tag.
-      cat "${tag_cache}" \
-        | grep \
+      cat "${tag_cache}" |
+        grep \
           -e "^${basevers}" \
-          -e "^${GITNUBS_PREFIX}${basevers}" \
-        | _pick_largest_fulltag
+          -e "^${GITNUBS_PREFIX}${basevers}" |
+        _pick_largest_fulltag
     fi
   fi
 
   command rm "${tag_cache}"
 }
 
-git_largest_version_tag_from_remote_normal () {
+git_largest_version_tag_from_remote_normal() {
   local remote_name="$1"
 
   if [ -z "${remote_name}" ]; then
@@ -1273,11 +1273,11 @@ git_largest_version_tag_from_remote_normal () {
   # Alternatively, without a cache:
   #   normal_vers="$(git_latest_version_from_remote_normal "$@")"
   local tag_cache
-  tag_cache="$(_generate_tag_list_from_remote "${remote_name}")" \
-    || return 1
+  tag_cache="$(_generate_tag_list_from_remote "${remote_name}")" ||
+    return 1
 
   local normal_vers
-  normal_vers="$( \
+  normal_vers="$(
     cat "${tag_cache}" | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS_NORMAL}"
   )"
 
@@ -1285,11 +1285,11 @@ git_largest_version_tag_from_remote_normal () {
 
   if [ -n "${normal_vers}" ]; then
     # Print the tag name; include the v-prefix if present.
-    cat "${tag_cache}" \
-      | grep \
+    cat "${tag_cache}" |
+      grep \
         -e "^${normal_vers}$" \
-        -e "^${GITNUBS_PREFIX}${normal_vers}$" \
-      | head -n1
+        -e "^${GITNUBS_PREFIX}${normal_vers}$" |
+      head -n1
   fi
 
   command rm "${tag_cache}"
@@ -1339,13 +1339,13 @@ git_largest_version_tag_from_remote_normal () {
 #     sed 's/\(\~\|\^0\).*//'
 #   }
 
-git_most_recent_version_tag () {
+git_most_recent_version_tag() {
   local gitref="$1"
 
   git_most_recent_tag "${gitref}" ${_limit_version:-true}
 }
 
-git_most_recent_tag () {
+git_most_recent_tag() {
   local gitref="$1"
   local limit_version="${2:-false}"
 
@@ -1365,18 +1365,18 @@ git_most_recent_tag () {
   #   https://stackoverflow.com/questions/71689439/
   #     git-how-to-sort-tags-by-the-date-of-the-corresponding-commit
   local tag_commit_objects
-  tag_commit_objects="$( \
+  tag_commit_objects="$(
     git tag --format='%(objectname)^{}' --merged HEAD ${no_merged} \
-    ${tag_patterns} \
-    | git cat-file --batch-check \
-    | awk '$2=="commit" { print $1 }' \
+      ${tag_patterns} |
+      git cat-file --batch-check |
+      awk '$2=="commit" { print $1 }'
   )"
 
   if [ -n "${tag_commit_objects}" ]; then
     local latest_commit
-    latest_commit="$( \
-      echo "${tag_commit_objects}" \
-      | git log --stdin --no-walk --format=%H -1
+    latest_commit="$(
+      echo "${tag_commit_objects}" |
+        git log --stdin --no-walk --format=%H -1
     )"
 
     local existing_tags
@@ -1390,23 +1390,23 @@ git_most_recent_tag () {
       existing_tags="$(git_versions_tagged_for_commit_object "${latest_commit}")"
 
       local largest_basetag
-      largest_basetag="$( \
-        echo "${existing_tags}" \
-        | _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
+      largest_basetag="$(
+        echo "${existing_tags}" |
+          _pick_largest_basetag "${GITNUBS_RE_VERSPARTS}"
       )"
 
       if echo "${existing_tags}" | grep -q -e "^${largest_basetag}$"; then
         recent_tag="${largest_basetag}"
       else
         # See similar pipeline below, git_smallest_version_tag_after
-        recent_tag="$( \
-          echo "${existing_tags}" \
-            | grep -E -e "^${largest_basetag}" \
-            | perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \2.\3.\5\6\7/" \
-            | sed '/^$/d' \
-            | sort -k1,1r -k2,2rn \
-            | head -n1 \
-            | sed -E "s/^[^,]*, [^,]*, //"
+        recent_tag="$(
+          echo "${existing_tags}" |
+            grep -E -e "^${largest_basetag}" |
+            perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \2.\3.\5\6\7/" |
+            sed '/^$/d' |
+            sort -k1,1r -k2,2rn |
+            head -n1 |
+            sed -E "s/^[^,]*, [^,]*, //"
         )"
       fi
     fi
@@ -1426,31 +1426,31 @@ git_most_recent_tag () {
 #   will find those tags), e.g.:
 #     git tag -l --contains "${gitref}" "[0-9]*" "v[0-9]*"
 
-git_smallest_version_tag_after () {
+git_smallest_version_tag_after() {
   local gitref="${1:-HEAD}"
 
-  local smallest_patch="$( \
+  local smallest_patch="$(
     git tag -l --merged HEAD --no-merged "${gitref}" \
-      ${GITNUBS_VERSION_TAG_PATTERNS} \
-      | grep -E -e "${GITNUBS_RE_VERSPARTS}" \
-      | sort -V \
-      | head -n1
+      ${GITNUBS_VERSION_TAG_PATTERNS} |
+      grep -E -e "${GITNUBS_RE_VERSPARTS}" |
+      sort -V |
+      head -n1
   )"
 
   # This is *ridonkulous*.
   # - See similar pipeline above, git_most_recent_tag
   local smallest_including_alpha
-  smallest_including_alpha="$( \
+  smallest_including_alpha="$(
     git tag -l --merged HEAD --no-merged "${gitref}" \
       "${smallest_patch}*" \
-      "${GITNUBS_PREFIX:-v}${smallest_patch}*" \
-      | grep -E -e "${GITNUBS_RE_VERSPARTS}" \
-      | grep -E -v "^${smallest_patch}$" \
-      | perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \2.\3.\5\6\7/" \
-      | sed '/^$/d' \
-      | sort -k1,1 -k2,2n \
-      | head -n1 \
-      | sed -E "s/^[^,]*, [^,]*, //"
+      "${GITNUBS_PREFIX:-v}${smallest_patch}*" |
+      grep -E -e "${GITNUBS_RE_VERSPARTS}" |
+      grep -E -v "^${smallest_patch}$" |
+      perl -ne "print if s/${GITNUBS_RE_VERSPARTS}/\6, \7, \2.\3.\5\6\7/" |
+      sed '/^$/d' |
+      sort -k1,1 -k2,2n |
+      head -n1 |
+      sed -E "s/^[^,]*, [^,]*, //"
   )"
 
   local smallest_version="${smallest_including_alpha}"
@@ -1461,11 +1461,11 @@ git_smallest_version_tag_after () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-git_since_most_recent_commit_epoch_ts () {
-  git --no-pager log -1 --format=%at HEAD 2> /dev/null
+git_since_most_recent_commit_epoch_ts() {
+  git --no-pager log -1 --format=%at HEAD 2>/dev/null
 }
 
-git_since_latest_version_tag_epoch_ts () {
+git_since_latest_version_tag_epoch_ts() {
   # Note that the "described" tag output (e.g., 0.12.0-828-g0266e06) is a
   # valid revision (per `man 7 gitrevisions`), which can be fed to git-log.
   # - And to compute a time delta from then to now, get seconds since epoch:
@@ -1475,10 +1475,10 @@ git_since_latest_version_tag_epoch_ts () {
     log -1 \
     --format=%at \
     "$(git_latest_version_basetag_safe)" \
-    2> /dev/null
+    2>/dev/null
 }
 
-git_since_git_init_commit_epoch_ts () {
+git_since_git_init_commit_epoch_ts() {
   # Note that the "described" tag output (e.g., 0.12.0-828-g0266e06) is a
   # valid revision (per `man 7 gitrevisions`), which can be fed to git-log.
   # - And to compute a time delta from then to now, get seconds since epoch:
@@ -1490,13 +1490,13 @@ git_since_git_init_commit_epoch_ts () {
     log -1 \
     --format=%at \
     "$(git_first_commit_sha)" \
-    2> /dev/null
+    2>/dev/null
 }
 
 # ***
 
-git_commit_date () {
-  git --no-pager log -1 --format=%cs ${1:-HEAD} 2> /dev/null
+git_commit_date() {
+  git --no-pager log -1 --format=%cs ${1:-HEAD} 2>/dev/null
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
@@ -1526,7 +1526,7 @@ git_commit_date () {
 #   - The output is very simple, e.g.,
 #       $ git ls-remote --tags origin 1.0.3
 #       882561bc420497d0791b7dcfeb81c1a3684f65bd	refs/tags/1.0.3
-git_tag_remote_verify_commit () {
+git_tag_remote_verify_commit() {
   local tag_name="$1"
   local remote_name="$2"
   local tag_commit="$3"
@@ -1570,7 +1570,7 @@ git_tag_remote_verify_commit () {
   remote_tag_hash="$(echo "${remote_tag_hash_and_path}" | cut -f1)"
 
   # Finish the output message.
-  printf '%s\n' " $( \
+  printf '%s\n' " $(
     git_sha_shorten "${remote_tag_hash}" ${GITNUBS_LENGTH_SHORTER_SHA:-7}
   )"
 
@@ -1594,4 +1594,3 @@ git_tag_remote_verify_commit () {
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
-

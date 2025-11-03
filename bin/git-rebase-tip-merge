@@ -6,18 +6,18 @@
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-source_deps () {
+source_deps() {
   # Runs: _grtcommon_source_deps
   source_lib \
     "${GITREPOSPATH:-${DOPP_KIT:-${HOME}/.kit}/git}/git-rebase-tip" \
-    "lib/git-rebase-tip-common.sh" \
-    || return 1
+    "lib/git-rebase-tip-common.sh" ||
+    return 1
 }
 
 # ***
 
 # USYNC: Same source_lib in both files: git-rebase-tip-(merge|common)
-source_lib () {
+source_lib() {
   # For DepoXy users, the project parent directory.
   local depoxy_basedir="$1"
   # As fallback, check deps/ which ships with this project.
@@ -35,7 +35,7 @@ source_lib () {
 
   cd -- "${depoxy_basedir}/${lib_dir}"
 
-  if . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null; then
+  if . "${depoxy_basedir}/${deps_lib_path}" 2>/dev/null; then
     sourced=true
   else
     # Assumes started in this script's parent directory.
@@ -52,7 +52,7 @@ source_lib () {
 
     return 0
   fi
-  
+
   >&2 echo "ERROR: Cannot determine source path for dependency: ${lib_name}"
 
   return 1
@@ -113,7 +113,7 @@ MERGE_STATE_CODE_GAMBOL=2
 # Re: The function name: It's not really a rebase (uses rebase to merge),
 # but nice to use the 'rebase_tip' prefix for discoverability.
 
-rebase_tip_merge () {
+rebase_tip_merge() {
   local rebase_ref="$1"
   local local_branch="$2"
   local push_remote="${3:--}"
@@ -190,25 +190,25 @@ rebase_tip_merge () {
 
 # ***
 
-insist_args_valid () {
+insist_args_valid() {
   local rebase_ref="$1"
   local local_branch="$2"
   local resume_cmd="$3"
 
   # ***
 
-  REBASE_REF_SHA="$(insist_git_rev_parse "${rebase_ref}" "rebase_ref")" \
-    || exit_1
+  REBASE_REF_SHA="$(insist_git_rev_parse "${rebase_ref}" "rebase_ref")" ||
+    exit_1
 
-  insist_git_rev_parse "${local_branch}" "local_branch" > /dev/null
+  insist_git_rev_parse "${local_branch}" "local_branch" >/dev/null
 
   # ***
 
   local merge_state_code=0
 
   PREVIOUS_REF=""
-  verify_merge_state "${rebase_ref}" "${REBASE_REF_SHA}" "${resume_cmd}" \
-    || merge_state_code=$?
+  verify_merge_state "${rebase_ref}" "${REBASE_REF_SHA}" "${resume_cmd}" ||
+    merge_state_code=$?
 
   if [ ${merge_state_code} -eq ${MERGE_STATE_CODE_ERROR} ]; then
 
@@ -222,14 +222,14 @@ insist_args_valid () {
 
 # ***
 
-must_resort_and_sign_commits () {
+must_resort_and_sign_commits() {
   info "Sorting and signing latest commits..."
 
   if ! git rebase-sort-by-scope-protected-private \
     "${_starting_ref:-}" \
     "${_enable_gpg_sign_if_signingkey:-true}" \
     "${_use_magic_starting_ref:-true}" \
-  ; then
+    ; then
     >&2 echo "ERROR: Sort & sign failed!"
 
     exit_1
@@ -238,7 +238,7 @@ must_resort_and_sign_commits () {
 
 # ***
 
-rebase_merge_branches () {
+rebase_merge_branches() {
   local rebase_ref="$1"
   local local_branch="$2"
   local push_remote="$3"
@@ -269,8 +269,8 @@ rebase_merge_branches () {
 
   if ${rebase_failed}; then
     # Assume conflicts were the failure.
-    inject_exec_callback "${RESUME_CMD_MERGED}" \
-      || exit_1
+    inject_exec_callback "${RESUME_CMD_MERGED}" ||
+      exit_1
 
     log_please_resolve_conflicts_message
 
@@ -283,7 +283,7 @@ rebase_merge_branches () {
 # ***
 
 # If branch has scoped (PRIVATE:/PROTECTED:) commits, bubble them up.
-rebase_sort_by_scope () {
+rebase_sort_by_scope() {
   local old_scope_boundary="$1"
 
   if [ -z "${old_scope_boundary}" ]; then
@@ -334,7 +334,7 @@ rebase_sort_by_scope () {
 # others can use without needing to force-pull because we keep rebasing
 # our work.
 
-verify_merge_state () {
+verify_merge_state() {
   local rebase_ref="$1"
   local rebase_ref_sha="$2"
   local resume_cmd="$3"
@@ -346,7 +346,7 @@ verify_merge_state () {
   fi
 }
 
-verify_merge_state_merges () {
+verify_merge_state_merges() {
   local rebase_ref="$1"
   local rebase_ref_sha="$2"
   local resume_cmd="$3"
@@ -373,7 +373,7 @@ verify_merge_state_merges () {
   return 0
 }
 
-verify_merge_state_linear () {
+verify_merge_state_linear() {
   local rebase_ref_sha="$1"
 
   PREVIOUS_REF=""
@@ -403,7 +403,7 @@ verify_merge_state_linear () {
 
     return ${MERGE_STATE_CODE_ERROR}
   else
-    PREVIOUS_REF="$( \
+    PREVIOUS_REF="$(
       echo "${rebase_ref_tags}" | sed "s/^${MERGE_BASE_TAG_PREFIX}//"
     )"
 
@@ -458,7 +458,7 @@ verify_merge_state_linear () {
 #     the next time I want one. I can just search my sources for
 #     `GIT_SEQUENCE_EDITOR` and hope to find one.
 
-git_rebase_pick_range () {
+git_rebase_pick_range() {
   local previous_ref="$1"
   local rebase_ref="$2"
 
@@ -479,10 +479,10 @@ git_rebase_pick_range () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-# This does the same work as  `git merge ${rebase_ref}` but it allows us
+# This does the same work as `git merge ${rebase_ref}` but it allows us
 # to inject `exec` into the rebase-todo if the rebase stops on conflicts.
 
-git_rebase_merge_ref () {
+git_rebase_merge_ref() {
   local rebase_ref="$1"
 
   info "git rebase — merge ${rebase_ref}"
@@ -498,7 +498,7 @@ git_rebase_merge_ref () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-manage_merge_base_tags () {
+manage_merge_base_tags() {
   local rebase_ref_sha="$1"
 
   # Remove previous breadcrumb tag.
@@ -511,7 +511,7 @@ manage_merge_base_tags () {
 
 # ***
 
-print_merge_base_tags () {
+print_merge_base_tags() {
   git tag -l "${MERGE_BASE_TAG_PREFIX}"* --merged
 }
 
@@ -519,28 +519,28 @@ print_merge_base_tags () {
 
 PROG_NAME="git-rebase-tip-merge"
 
-clear_traps () {
+clear_traps() {
   trap - EXIT INT
 }
 
-set_traps () {
+set_traps() {
   trap -- trap_exit EXIT
   trap -- trap_int INT
 }
 
-exit_0 () {
+exit_0() {
   clear_traps
 
   exit 0
 }
 
-exit_1 () {
+exit_1() {
   clear_traps
 
   exit 1
 }
 
-trap_exit () {
+trap_exit() {
   clear_traps
 
   # USAGE: Alert on unexpected error path, so you can add happy path.
@@ -550,7 +550,7 @@ trap_exit () {
   exit 2
 }
 
-trap_int () {
+trap_int() {
   clear_traps
 
   exit 3
@@ -558,7 +558,7 @@ trap_int () {
 
 # ***
 
-main () {
+main() {
   set -e
 
   set_traps
@@ -579,4 +579,3 @@ fi
 
 unset -f main
 unset -f source_deps
-

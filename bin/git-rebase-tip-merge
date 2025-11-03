@@ -173,6 +173,8 @@ rebase_tip_merge() {
       local vers
       vers="$(git_largest_version_tag_excluding_tip "${rebase_ref}")"
 
+      info "Identified largest verstion tag: ${vers}"
+
       local tip_vers
       tip_vers="$(manage_tip_version_tag "${vers}" "${_stage:-rc}")"
 
@@ -231,6 +233,11 @@ insist_args_valid() {
 must_resort_and_sign_commits() {
   info "Sorting and signing latest commits..."
 
+  debug "git rebase-sort-by-scope-protected-private \
+    \"${_starting_ref:-}\" \
+    \"${_enable_gpg_sign_if_signingkey:-true}\" \
+    \"${_use_magic_starting_ref:-true}\""
+
   if ! git rebase-sort-by-scope-protected-private \
     "${_starting_ref:-}" \
     "${_enable_gpg_sign_if_signingkey:-true}" \
@@ -250,6 +257,8 @@ rebase_merge_branches() {
   local push_remote="$3"
 
   if [ -n "${push_remote}" ]; then
+    debug "git branch -q -u \"${push_remote}\""
+
     git branch -q -u "${push_remote}"
   fi
 
@@ -486,8 +495,20 @@ git_rebase_merge_ref() {
   local rebase_ref="$1"
 
   info "git rebase — merge ${rebase_ref}"
+  debug "
+$(
+    cat <<EOF
+    GIT_SEQUENCE_EDITOR='f () {
+      local rebase_todo_path="\$1"
+      echo "merge '${rebase_ref}'" > "\${rebase_todo_path}"
+      # echo "exec notify-send Rebased!" >> "\${rebase_todo_path}"
+      # echo
+      # >&2 cat "\${rebase_todo_path}"
+    }; f "\$1"' git rebase -i "HEAD"
+EOF
+  )"
 
-  GIT_SEQUENCE_EDITOR='f () { \
+  GIT_SEQUENCE_EDITOR='f () {
     local rebase_todo_path="$1"
     echo "merge '${rebase_ref}'" > "${rebase_todo_path}"
     # echo "exec notify-send Rebased!" >> "${rebase_todo_path}"

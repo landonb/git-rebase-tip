@@ -159,8 +159,55 @@ rebase_tip_merge() {
 
   # ***
 
+  # BWARE/2024-11-29: THIS IS HARD.
+  # - NOTED/2025-11-02: I think I got this working solidly, but I
+  #   don't use this feature very often, and I haven't tested all
+  #   the corner cases. (I'm also not very proud of git-rebase-tip
+  #   in general, or at least it seems overly complicated for what
+  #   it's trying to solve, and it's not well documented; I mean,
+  #   you could just not care about signing commits, nor use scoped
+  #   (PROTECTED and PRIVATE) commits, and then you wouldn't have to
+  #   maintain this messy, fragile code! (On the other hand, it tries
+  #   to tackle a tricky task, merging code you don't plan to PR to
+  #   an upstream project, and bubbling PROTECTED and PRIVATE commits
+  #   you'll never publish, while ensuring your commits are signed,
+  #   and working across git calls when git-merge needs to stop so
+  #   the user can resolve conflicts; which is to say, the problem
+  #   space isn't trivial, so maybe you shouldn't expect this code
+  #   to be, either.))
+  #   - SAVVY: You need to sign commits before merging, otherwise
+  #     you'll run into issues signing commits that precede the
+  #     merge commit, because you'll change the SHAs of the
+  #     upstream commits, defeating the purpose of merging (and
+  #     trying to maintain commit history so that other users
+  #     won't have to reset--hard their checkouts).
+  #   - So here we sign just the new merge commit.
+  sign_last_commit_if_merge_commit() {
+    debug
+    debug "SIGNING"
+    debug "git log -n 1 --format=%H: $(git log -n 1 --format=%H)"
+    debug
+
+    if [ -z "$(git config user.signingkey)" ]; then
+
+      return 0
+    fi
+
+    if [ "$(git log --merges -n 1 --format=%H)" = "$(git log -n 1 --format=%H)" ]; then
+      debug "git commit --amend --no-edit --allow-empty --no-verify -S -q"
+
+      git commit --amend --no-edit --allow-empty --no-verify -S -q
+
+      debug
+      debug "SIGNED!"
+      debug "git log -n 1 --format=%H: $(git log -n 1 --format=%H)"
+      debug
+    fi
+  }
+
   # The "merged" action completed.
   if [ "${CURRENT_RESUME_CMD}" = "${RESUME_CMD_MERGED}" ]; then
+    sign_last_commit_if_merge_commit
     # Sets CURRENT_RESUME_CMD.
     rebase_sort_by_scope "${scope_boundary}"
   fi
@@ -300,19 +347,33 @@ rebase_sort_by_scope() {
     return 0
   fi
 
-  info "git rebase-sort-by-scope-protected-private ${old_scope_boundary}"
+  info "git rebase-sort-by-scope-protected-private ${old_scope_boundary} false"
 
-  if ! \
-    PW_OPTION_ORPHAN_TAGS=true \
+  if ! PW_OPTION_ORPHAN_TAGS=true \
     PW_OPTION_IGNORE_AUTHOR=true \
-    git rebase-sort-by-scope-protected-private "${old_scope_boundary}" \
-  ; then
+    git rebase-sort-by-scope-protected-private \
+    "${_starting_ref:-${old_scope_boundary}}" \
+    "${_enable_gpg_sign_if_signingkey:-false}" \
+    ; then
+
     # Unless we're waiting for success to run another task,
     # there's nothing to do after the user fixes conflicts.
     if ${add_version_tag:-false} || ${MERGE_BASE_LINEAR_ENABLE:-false}; then
       # Assume conflicts were the failure.
-      inject_exec_callback "${RESUME_CMD_SCOPED}" \
-        || exit_1
+
+      # Assume after git-rebase-continue that the latest commit is the
+      # merge commit, and sign it... and I'm not sure there's a better
+      # way to do this, since this'll be a new commit that sort-by-scope
+      # didn't have in its rebase-todo.
+      if [ -n "$(git config user.signingkey)" ]; then
+        printf '%s\n%s\n' \
+          "exec git commit --amend --no-edit --allow-empty --no-verify -S -q" \
+          "$(cat "${GIT_REBASE_TODO_PATH}")" \
+          >"${GIT_REBASE_TODO_PATH}"
+      fi
+
+      inject_exec_callback "${RESUME_CMD_SCOPED}" ||
+        exit_1
 
       log_please_resolve_conflicts_message
     fi

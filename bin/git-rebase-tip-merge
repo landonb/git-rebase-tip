@@ -140,6 +140,13 @@ rebase_tip_merge() {
 
   # The default ("") action.
   if [ -z "${CURRENT_RESUME_CMD}" ]; then
+    # Check out local_branch.
+    if ! git checkout -q "${local_branch}"; then
+      >&2 error "ERROR: Please specify an existing 'local_branch', not: ${local_branch}"
+
+      exit_1
+    fi
+
     # Ensure sorted and signed before merging.
     must_resort_and_sign_commits
 
@@ -147,7 +154,6 @@ rebase_tip_merge() {
     cache_scope_boundary "${scope_boundary}"
 
     # Expects PREVIOUS_REF and sets CURRENT_RESUME_CMD.
-    # - Checks out local_branch.
     rebase_merge_branches "${rebase_ref}" "${local_branch}" "${push_remote}"
   fi
 
@@ -242,12 +248,6 @@ rebase_merge_branches() {
   local rebase_ref="$1"
   local local_branch="$2"
   local push_remote="$3"
-
-  if ! git checkout -q "${local_branch}"; then
-    >&2 error "ERROR: Please specify an existing 'local_branch', not: ${local_branch}"
-
-    exit_1
-  fi
 
   if [ -n "${push_remote}" ]; then
     git branch -q -u "${push_remote}"

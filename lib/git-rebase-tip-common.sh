@@ -201,6 +201,9 @@ inject_exec_callback () {
         >> "${GIT_REBASE_TODO_PATH}"
   fi
 
+  echo "exec echo && echo \"ALERT: Please *WAIT* a second after you see the prompt!!\" && echo \"- The rebase will continue in the background, so don't touch anything!\" && echo" \
+    >> "${GIT_REBASE_TODO_PATH}"
+
   # debug rebase-todo: $(cat "${GIT_REBASE_TODO_PATH}" | tail -n 1)
 }
 
@@ -209,6 +212,12 @@ inject_exec_callback () {
 log_please_resolve_conflicts_message () {
   >&2 info "Please resolve conflicts. We'll resume"
   >&2 info "after the final \`git rebase --continue\`"
+  >&2 info
+  >&2 info "BWARE: You must *WAIT* a second after --continue"
+  >&2 info "       before the process starts going again!!"
+  >&2 info
+  >&2 debug "\$ cat ${GIT_REBASE_TODO_PATH}"
+  >&2 debug "$(cat "${GIT_REBASE_TODO_PATH}" | sed 's/^/  /')"
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #

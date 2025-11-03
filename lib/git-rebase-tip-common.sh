@@ -279,6 +279,7 @@ manage_tip_bump_version () {
   #   Similarly, specify "-" as the remote/branch.
   export BMP_NO_NORMALIZE=true
   export BMP_RESTRICT_LOCAL=true
+  export PW_OPTION_SKIP_REBASE=true
   local bump_failed=false
   if ! git bump-version-tag "${tip_vers}" -- "-" > /dev/null 2>&1; then
     bump_failed=true
@@ -288,7 +289,7 @@ manage_tip_bump_version () {
     >&2 warn "ERROR: Failed: git bump-version-tag \"${tip_vers}\" -- \"-\""
 
     # For the stderr.
-    git bump-version-tag "${tip_vers}" -- "-"
+    PW_OPTION_SKIP_REBASE=true git bump-version-tag "${tip_vers}" -- "-"
 
     exit_1
   fi

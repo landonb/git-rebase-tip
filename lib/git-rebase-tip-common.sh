@@ -6,15 +6,15 @@
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-_grtcommon_source_deps () {
+_grtcommon_source_deps() {
   # Ensure coreutils installed.
-  insist_cmd "realpath" '- TIP: `apt install coreutils` or `brew install coreutils`' \
-    || return 1
+  insist_cmd "realpath" '- TIP: `apt install coreutils` or `brew install coreutils`' ||
+    return 1
 
   # Load the logger library: https://github.com/landonb/sh-logger#🎮🐸
   # - Includes print commands: info, warn, error, debug.
-  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" \
-    || return 1
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" ||
+    return 1
 
   LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_DEBUG}}
   # So that rebase-todo background exec logger output is colorful.
@@ -23,20 +23,20 @@ _grtcommon_source_deps () {
   # Load Git function lib: https://github.com/landonb/sh-git-nubs#🌰
   # - Includes git_branch_exists, git_branch_name, git_sha_shorten,
   #   git_remote_branch_object_name, git_upstream_parse_branch_name, etc.
-  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-git-nubs/lib/git-nubs.sh" \
-    || return 1
+  source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-git-nubs/lib/git-nubs.sh" ||
+    return 1
 }
 
 # ***
 
-insist_cmd () {
+insist_cmd() {
   local cmd_name="$1"
   local install_hint="$2"
 
-  command -v "${cmd_name}" > /dev/null && return || true
+  command -v "${cmd_name}" >/dev/null && return || true
 
   local logger=echo
-  if command -v error > /dev/null; then
+  if command -v error >/dev/null; then
     logger=error
   fi
 
@@ -54,7 +54,7 @@ insist_cmd () {
 # - SAVVY: The callers have their own source_lib functions, so this
 #   copy not needed if running one of the bin/ scripts. But this fcn.
 #   is needed if you just want to source this file for development.
-source_lib () {
+source_lib() {
   # For DepoXy users, the project parent directory.
   local depoxy_basedir="$1"
   # As fallback, check deps/ which ships with this project.
@@ -72,7 +72,7 @@ source_lib () {
 
   cd -- "${depoxy_basedir}/${lib_dir}"
 
-  if . "${depoxy_basedir}/${deps_lib_path}" 2> /dev/null; then
+  if . "${depoxy_basedir}/${deps_lib_path}" 2>/dev/null; then
     sourced=true
   else
     # Assumes started in this script's parent directory.
@@ -89,7 +89,7 @@ source_lib () {
 
     return 0
   fi
-  
+
   >&2 echo "ERROR: Cannot determine source path for dependency: ${lib_name}"
 
   return 1
@@ -97,11 +97,11 @@ source_lib () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-insist_git_rev_parse () {
+insist_git_rev_parse() {
   local git_ref="$1"
   local var_name="$2"
 
-  if ! git rev-parse "${git_ref}" 2> /dev/null; then
+  if ! git rev-parse "${git_ref}" 2>/dev/null; then
     >&2 error "ERROR: Please specify a valid '${var_name}', not: ${git_ref}"
 
     exit_1
@@ -110,7 +110,7 @@ insist_git_rev_parse () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-git_largest_version_tag_excluding_tip () {
+git_largest_version_tag_excluding_tip() {
   local upstream="$1"
 
   local remote_name
@@ -140,13 +140,13 @@ git_largest_version_tag_excluding_tip () {
   printf "%s" "${vers}"
 }
 
-extract_validated_remote_name () {
+extract_validated_remote_name() {
   local upstream="$1"
 
   local remote_name
   remote_name="$(git_upstream_parse_remote_name "${upstream}")"
 
-  if git remote get-url "${remote_name}" > /dev/null 2>&1; then
+  if git remote get-url "${remote_name}" >/dev/null 2>&1; then
     printf "%s" "${remote_name}"
   fi
 }
@@ -164,10 +164,10 @@ extract_validated_remote_name () {
 
 GIT_REBASE_TODO_PATH=".git/rebase-merge/git-rebase-todo"
 
-inject_exec_callback () {
+inject_exec_callback() {
   local rebase_cmd="$1"
 
-  insist_environ_non_empty () {
+  insist_environ_non_empty() {
     local environ_name="$1"
 
     if eval "test -z \"\$${environ_name}\""; then
@@ -179,18 +179,18 @@ inject_exec_callback () {
     fi
   }
 
-  insist_environ_non_empty "TIP_COMMAND_ARGS" \
-    || return 1
+  insist_environ_non_empty "TIP_COMMAND_ARGS" ||
+    return 1
 
   if [ -n "${MR_ACTION}" ]; then
     # DepoXy ohmyrepos support.
-    insist_environ_non_empty "MR_REPO" \
-      || return 1
+    insist_environ_non_empty "MR_REPO" ||
+      return 1
 
     echo "exec sleep 0.1 && \
       mr -d \"${MR_REPO}\" -n \"${MR_ACTION}\" \"${rebase_cmd}\" \
         ${TIP_COMMAND_ARGS} &" \
-        >> "${GIT_REBASE_TODO_PATH}"
+      >>"${GIT_REBASE_TODO_PATH}"
   else
     # BWARE: This exec won't work unless:
     # - There are no spaces in any of the arguments.
@@ -198,18 +198,18 @@ inject_exec_callback () {
 
     echo "exec sleep 0.1 && \
       exec sh -c 'TIP_REBASE_CMD=\"${rebase_cmd}\" \"$0\" ${TIP_COMMAND_ARGS} &'" \
-        >> "${GIT_REBASE_TODO_PATH}"
+      >>"${GIT_REBASE_TODO_PATH}"
   fi
 
   echo "exec echo && echo \"ALERT: Please *WAIT* a second after you see the prompt!!\" && echo \"- The rebase will continue in the background, so don't touch anything!\" && echo" \
-    >> "${GIT_REBASE_TODO_PATH}"
+    >>"${GIT_REBASE_TODO_PATH}"
 
   # debug rebase-todo: $(cat "${GIT_REBASE_TODO_PATH}" | tail -n 1)
 }
 
 # ***
 
-log_please_resolve_conflicts_message () {
+log_please_resolve_conflicts_message() {
   >&2 info "Please resolve conflicts. We'll resume"
   >&2 info "after the final \`git rebase --continue\`"
   >&2 info
@@ -222,7 +222,7 @@ log_please_resolve_conflicts_message () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-manage_tip_version_tag () {
+manage_tip_version_tag() {
   local vers="$1"
   local stage="$2"
 
@@ -234,8 +234,8 @@ manage_tip_version_tag () {
   fi
 
   local next_vers
-  if ! next_vers="$( \
-    git bump-version-tag p --check -- "-" 2> /dev/null
+  if ! next_vers="$(
+    git bump-version-tag p --check -- "-" 2>/dev/null
   )"; then
     >&2 echo "ERROR: Failed: git-bump -p --check -- -"
 
@@ -244,7 +244,7 @@ manage_tip_version_tag () {
 
     exit_1
   fi
-  
+
   local commit_dist=""
   commit_dist="$(print_distance_to_scoped_head "${vers}")"
 
@@ -259,7 +259,7 @@ manage_tip_version_tag () {
   local tip_vers="${next_vers}${dash_prerelease}${stage}${dot_identifier}${commit_dist}"
 
   # Run in ( subprocess ) b/c the `export` calls.
-  if ! ( manage_tip_bump_version "${tip_vers}" ); then
+  if ! (manage_tip_bump_version "${tip_vers}"); then
 
     exit_1
   fi
@@ -267,12 +267,12 @@ manage_tip_version_tag () {
   printf "%s" "${tip_vers}"
 }
 
-manage_tip_bump_version () {
+manage_tip_bump_version() {
   local tip_vers="$1"
 
   # If user deleted old TIP branch and is running this command again,
   # ensure old TIP tag doesn't interfere.
-  git tag -d "${tip_vers}" > /dev/null 2>&1 || true
+  git tag -d "${tip_vers}" >/dev/null 2>&1 || true
 
   # - BMP_NO_NORMALIZE=true — Because the '+' usage is not SemVer.
   # - BMP_RESTRICT_LOCAL=true — Don't push to the remote
@@ -281,7 +281,7 @@ manage_tip_bump_version () {
   export BMP_RESTRICT_LOCAL=true
   export PW_OPTION_SKIP_REBASE=true
   local bump_failed=false
-  if ! git bump-version-tag "${tip_vers}" -- "-" > /dev/null 2>&1; then
+  if ! git bump-version-tag "${tip_vers}" -- "-" >/dev/null 2>&1; then
     bump_failed=true
   fi
 
@@ -297,7 +297,7 @@ manage_tip_bump_version () {
 
 # ***
 
-print_distance_to_scoped_head () {
+print_distance_to_scoped_head() {
   local vers="$1"
 
   local scoped_head
@@ -305,7 +305,7 @@ print_distance_to_scoped_head () {
   [ -n "${scoped_head}" ] || scoped_head="HEAD"
 
   local dist_remote_tag_to_scoped_head
-  dist_remote_tag_to_scoped_head=$( \
+  dist_remote_tag_to_scoped_head=$(
     git rev-list --count "refs/tags/${vers}..${scoped_head}"
   )
 
@@ -314,12 +314,12 @@ print_distance_to_scoped_head () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-check_git_put_wise_and_sort_by_scope_installed () {
+check_git_put_wise_and_sort_by_scope_installed() {
   if ! insist_cmd \
     'git-put-wise' \
     '- See: Project: https://github.com/DepoXy/git-put-wise#🥨' \
-    2> /dev/null \
-  ; then
+    2>/dev/null \
+    ; then
 
     return 1
   fi
@@ -328,8 +328,8 @@ check_git_put_wise_and_sort_by_scope_installed () {
   if ! insist_cmd \
     'git-rebase-sort-by-scope-protected-private' \
     '- See: Project: https://github.com/DepoXy/git-put-wise#🥨' \
-    2> /dev/null \
-  ; then
+    2>/dev/null \
+    ; then
 
     return 1
   fi
@@ -337,7 +337,7 @@ check_git_put_wise_and_sort_by_scope_installed () {
 
 # ***
 
-cache_scope_boundary () {
+cache_scope_boundary() {
   local scope_boundary="$1"
   local scope_boundary="${1:--}"
 
@@ -345,25 +345,30 @@ cache_scope_boundary () {
 
   # The scope_boundary is the final arg, while we peel off and replace.
   # - `xargs` echoes without newline by default.
-  TIP_COMMAND_ARGS="$( \
-    ( echo "${TIP_COMMAND_ARGS}" \
-        | tr ' ' '\n' \
-        | $(gnu_head) -n -1; \
-      echo "${scope_boundary}"; \
+  TIP_COMMAND_ARGS="$(
+    (
+      echo "${TIP_COMMAND_ARGS}" |
+        tr ' ' '\n' |
+        $(gnu_head) -n -1
+      echo "${scope_boundary}"
     ) | xargs
   )"
 }
 
-gnu_head () {
+gnu_head() {
   for cmd in "ghead" "head"; do
-    ( unset -f ${cmd}; unalias ${cmd}; command -v ${cmd} ) 2> /dev/null \
-      && break
+    (
+      unset -f ${cmd}
+      unalias ${cmd}
+      command -v ${cmd}
+    ) 2>/dev/null &&
+      break
   done
 }
 
 # ***
 
-print_scope_boundary () {
+print_scope_boundary() {
   # Optional deps. Silently returns happily if put-wise absent.
   if ! check_git_put_wise_and_sort_by_scope_installed; then
 
@@ -380,4 +385,3 @@ print_scope_boundary () {
 _grtcommon_source_deps
 
 unset -f _grtcommon_source_deps
-

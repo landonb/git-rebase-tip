@@ -16,7 +16,7 @@ _grtcommon_source_deps() {
   source_lib "${SHOILERPLATE:-${HOME}/.kit/sh}" "sh-logger/bin/logger.sh" ||
     return 1
 
-  LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_DEBUG}}
+  LOG_LEVEL=${TIP_LOG_LEVEL:-${LOG_LEVEL_INFO}}
   # So that rebase-todo background exec logger output is colorful.
   SHCOLORS_OFF=false
 

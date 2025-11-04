@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # vim:tw=0:ts=2:sw=2:et:norl:nospell:ft=bash
 # Author: Landon Bouma (landonb &#x40; retrosoft &#x2E; com)
 # Project: https://github.com/landonb/git-rebase-tip#💁
@@ -569,13 +569,16 @@ $(
 EOF
   )"
 
+  # Prints to stderr on success, e.g.:
+  # Successfully rebased and updated refs/heads/main.
+  # - Which we'll squelch with a fancy pipeline.
   GIT_SEQUENCE_EDITOR='f () {
     local rebase_todo_path="$1"
     echo "merge '${rebase_ref}'" > "${rebase_todo_path}"
     # echo "exec notify-send Rebased!" >> "${rebase_todo_path}"
     # echo
     # >&2 cat "${rebase_todo_path}"
-  }; f "$1"' git rebase -i "HEAD"
+  }; f "$1"' git rebase -i "HEAD" > >(cat) 2> >(grep -v "^Successfully rebased and updated")
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #

@@ -506,7 +506,7 @@ create_and_rebase_tip_branch_and_push_version_tag () {
   name="$(add_trailing_path_sep "${slug_name}")"
 
   local date=""
-  date="$(git_commit_date "${remote_ref}")"
+  date="$(git_commit_date_short "${remote_ref}")"
   date="$(add_trailing_path_sep "${date}")"
 
   local remote_name

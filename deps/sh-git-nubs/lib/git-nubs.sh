@@ -1496,7 +1496,15 @@ git_since_git_init_commit_epoch_ts() {
 # ***
 
 git_commit_date() {
+  git_commit_date_short "$@"
+}
+
+git_commit_date_short() {
   git --no-pager log -1 --format=%cs ${1:-HEAD} 2>/dev/null
+}
+
+git_commit_date_relative() {
+  git --no-pager log -1 --format=%cr ${1:-HEAD} 2>/dev/null
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #

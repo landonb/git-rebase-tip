@@ -601,7 +601,17 @@ git_insist_git_repo() {
   return 1
 }
 
-git_is_git_repo_root() {
+# BETTR/2026-06-02: Here's a more honest implementation than --show-toplevel:
+# - If --show-cdup doesn't error and doesn't stdout, you're in some repo root.
+git_is_git_repo_root_cdup() {
+  local rel_root
+
+  rel_root="$(
+    git rev-parse --show-cdup 2>/dev/null
+  )" && test -z "${rel_root}" || false
+}
+
+git_is_git_repo_root_toplevel() {
   local proj_path="${1:-$(pwd)}"
 
   local repo_root
@@ -616,6 +626,10 @@ git_is_git_repo_root() {
   fi
 
   return 0
+}
+
+git_is_git_repo_root() {
+  git_is_git_repo_root_cdup "$@"
 }
 
 git_insist_pristine() {

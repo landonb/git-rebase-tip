@@ -172,6 +172,10 @@ git_is_valid_object() {
   git rev-parse "${gitref}" >/dev/null 2>&1
 }
 
+git_is_file_tracked() {
+  git ls-files --error-unmatch -- "$@" >/dev/null 2>&1
+}
+
 git_is_same_object() {
   local lhs="$1"
   local rhs="$2"
